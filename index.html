@@ -307,7 +307,7 @@ const ETAPAS = [
 const ASESOR_COLORS = ['#185FA5','#0F6E56','#854F0B','#534AB7','#993C1D','#993556','#3B6D11','#A32D2D'];
 // Asesores start empty — loads from Firebase
 let asesores = [];
-let nextAid = 3, nextId = 30, activeProp = null;
+let nextAid = 1, nextId = 1, activeProp = null;
 const MAX = 14;
 
 function getA(id){ return asesores.find(a=>a.id===id) || {name:'—',color:'#888'}; }
@@ -399,12 +399,10 @@ function canViewProp(p){
   if(!me) return false;
   // Match by asesorId
   if(p.asesorId && p.asesorId === me.id) return true;
-  // Match by tokkoProducerName (case-insensitive, trim spaces)
-  if(p.tokkoProducerName){
-    var tkName = p.tokkoProducerName.trim().toLowerCase();
-    var meName = me.name.trim().toLowerCase();
-    if(tkName === meName || tkName.indexOf(meName) >= 0 || meName.indexOf(tkName) >= 0) return true;
-  }
+  // Match by tokkoProducerName (case-insensitive)
+  var tkName = (p.tokkoProducerName || '').trim().toLowerCase();
+  var meName = me.name.trim().toLowerCase();
+  if(tkName && meName && (tkName === meName || tkName.indexOf(meName) >= 0 || meName.indexOf(tkName) >= 0)) return true;
   return false;
 }
 
@@ -2534,7 +2532,6 @@ initAuthListener();
 function saveToFirestore(){
   if(!currentUser) return;
   var fb = window._fb;
-  // Shared data: props, compradores, asesores
   fb.setDoc(fb.doc(fb.db,'sessa','shared'), {
     props: JSON.parse(JSON.stringify(props)),
     compradores: JSON.parse(JSON.stringify(compradores)),
@@ -2562,13 +2559,13 @@ function startSync(){
   var unsubShared = fb.onSnapshot(fb.doc(fb.db,'sessa','shared'), function(snap){
     if(!snap.exists()) return;
     var data = snap.data();
-    // Only update if data is from server (avoid overwriting local on first load)
-    if(data.props)       { props = data.props; nextId = data.nextId||nextId; }
-    if(data.compradores) { compradores = data.compradores; nextCid = data.nextCid||nextCid; }
-    if(data.asesores)    { asesores = data.asesores; nextAid = data.nextAid||nextAid; }
+    if(data.props !== undefined)       { props = data.props;       nextId  = data.nextId  || nextId;  }
+    if(data.compradores !== undefined) { compradores = data.compradores; nextCid = data.nextCid || nextCid; }
+    if(data.asesores !== undefined)    { asesores = data.asesores; nextAid = data.nextAid || nextAid; }
     renderGrid();
     renderCompradores();
     updAsesorSel();
+    if(typeof renderAsesores === 'function') renderAsesores();
   });
   unsubscribers.push(unsubShared);
 
