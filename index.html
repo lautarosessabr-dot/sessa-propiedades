@@ -1143,6 +1143,7 @@ function updateAsesorEmail(aid, val){
   if(a){
     a.email = val.trim().toLowerCase();
     renderAsesores();
+    scheduleSave();
   }
 }
 
@@ -2332,6 +2333,12 @@ async function importarDesdeTokko(){
     if(producersAdded > 0){
       renderAsesores();
       updAsesorSel();
+      // Switch to Asesores tab so admin can set emails immediately
+      var asesorBtn = document.getElementById('tab-btn-asesores');
+      if(asesorBtn) asesorBtn.click();
+      setTimeout(function(){
+        alert('✅ Se crearon '+producersAdded+' asesor'+(producersAdded>1?'es':'')+' nuevos desde Tokko.\n\n⚠️ IMPORTANTE: andá a la pestaña Asesores y completá el email de login de cada uno para que puedan ver sus propiedades.');
+      }, 300);
     }
 
     // Filter out already imported (by tokko id)
