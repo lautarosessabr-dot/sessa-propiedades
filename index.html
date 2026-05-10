@@ -2344,11 +2344,14 @@ function renderStats(){
                          return new Date(parseInt(ym[0]),parseInt(ym[1])-1,1)
                            .toLocaleDateString('es-AR',{month:'long',year:'numeric'}); })() : '';
 
-  // Export backup button
-  h += '<div style="margin-top:16px;text-align:right;">'+
+  // Export buttons
+  h += '<div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">'+
     '<button onclick="exportarBackupExcel()" '+
     'style="height:34px;padding:0 16px;font-size:12px;font-weight:600;border:1px solid #0F6E56;border-radius:8px;background:#E1F5EE;color:#085041;cursor:pointer;font-family:inherit;">'+
-    '💾 Exportar backup completo (.xlsx)</button>'+
+    '💾 Exportar datos (.xlsx)</button>'+
+    '<button onclick="descargarHTML()" '+
+    'style="height:34px;padding:0 16px;font-size:12px;font-weight:600;border:1px solid #534AB7;border-radius:8px;background:#EEEDFE;color:#3C3489;cursor:pointer;font-family:inherit;">'+
+    '⬇️ Descargar código (.html)</button>'+
   '</div>';
 
   h += '<div style="margin-top:32px;padding:24px;background:linear-gradient(135deg,#1E3A5F,#185FA5);border-radius:16px;text-align:center;">'+
@@ -2775,6 +2778,20 @@ function renderCaptaciones(){
 
   el.innerHTML = h;
   renderCapDetail();
+}
+
+function descargarHTML(){
+  var html = document.documentElement.outerHTML;
+  var blob = new Blob([html], {type: 'text/html;charset=utf-8'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  var fecha = new Date().toLocaleDateString('es-AR').replace(/\//g,'-');
+  a.href = url;
+  a.download = 'sessa_tracker_'+fecha+'.html';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 function exportarBackupExcel(){
