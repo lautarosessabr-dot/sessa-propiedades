@@ -750,6 +750,7 @@ function saveEscribano(pid, field, val){
       cb.style.borderColor = '';
     }
   }
+  scheduleSave();
 }
 
 function saveDriveLink(pid, val){
@@ -778,6 +779,7 @@ function saveDriveLink(pid, val){
       renderDetail();
     }
   }
+  scheduleSave();
 }
 
 function updateBoletoCheck(pid){
@@ -1548,6 +1550,7 @@ function saveCompDrive(cid, val){
   }
   // Refresh to show/hide Open Drive button
   renderCompradorDetail();
+  scheduleSave();
 }
 
 function saveCompValor(cid, val){
@@ -1627,6 +1630,7 @@ function saveCompEscribano(cid, field, val){
       cb.innerHTML=''; cb.style.background=''; cb.style.borderColor='';
     }
   }
+  scheduleSave();
 }
 
 function setCompContactoHoy(cid){
@@ -1771,7 +1775,7 @@ function renderCompradorDetail(){
           '<div style="font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px;">Fecha de reserva</div>'+
           '<input type="text" placeholder="dd/mm/aaaa" value="'+c.fechaReserva+'" '+
           'style="font-size:12px;padding:4px 8px;height:28px;border:1px solid #ddd;border-radius:8px;background:#fff;color:#1a1a1a;outline:none;width:110px;font-family:inherit;" '+
-          'onchange="(function(el){var v=fixDateYear(el.value);el.value=v;compradores.find(function(x){return x.id==='+c.id+';}).fechaReserva=v;})(this)" '+
+          'onchange="(function(el){var v=fixDateYear(el.value);el.value=v;var cx=compradores.find(function(x){return x.id==='+c.id+';});if(cx){cx.fechaReserva=v;scheduleSave();}})(this)" '+
           'onclick="event.stopPropagation()"/>'+
         '</div>'+
         '<div>'+
@@ -3433,7 +3437,7 @@ function renderDetail(){
           '<input type="text" placeholder="Sin teléfono" value="'+p.telefono+'" '+
           'id="tel-inp-'+p.id+'" '+
           'style="font-size:12px;padding:2px 7px;height:24px;border:1px solid #ddd;border-radius:6px;background:#fff;color:#1a1a1a;outline:none;width:140px;font-family:inherit;" '+
-          'onchange="(function(v){var px=props.find(function(x){return x.id==='+p.id+';});if(px)px.telefono=v;})(this.value)" '+
+          'onchange="(function(v){var px=props.find(function(x){return x.id==='+p.id+';});if(px){px.telefono=v;scheduleSave();}})(this.value)" '+
           'onclick="event.stopPropagation()"/>'+
         '</span>'+
       '</div>'+
@@ -4194,6 +4198,8 @@ function startSync(){
   var unsubShared = fb.onSnapshot(fb.doc(fb.db,'sessa','shared'), function(snap){
     if(!snap.exists()) return;
     var data = snap.data();
+    // Pause saving while we apply remote data to avoid overwrite loop
+    _remoteUpdate = true;
     if(data.props !== undefined)        { props = data.props;             nextId   = data.nextId   || nextId;   }
     if(data.compradores !== undefined)  { compradores = data.compradores; nextCid  = data.nextCid  || nextCid;  }
     if(data.asesores !== undefined)     { asesores = data.asesores;       nextAid  = data.nextAid  || nextAid;  }
@@ -4201,10 +4207,15 @@ function startSync(){
     if(data.reservasLog !== undefined)  { reservasLog = data.reservasLog; }
     if(data.visitasDB !== undefined)    { visitasDB = data.visitasDB; }
     if(data.metaMensual !== undefined)  { metaMensual = data.metaMensual; }
-    renderGrid();
-    renderCompradores();
+    _remoteUpdate = false;
+    // Re-render without triggering save
+    _renderGridOnly();
+    _renderCompradoresOnly();
     updAsesorSel();
     if(typeof renderAsesores === 'function') renderAsesores();
+    // Refresh active detail panel if open
+    if(activeProp) renderDetail();
+    if(activeComprador) renderCompradorDetail();
   });
   unsubscribers.push(unsubShared);
 
@@ -4224,31 +4235,47 @@ function startSync(){
 }
 
 // ── Hook saves into all mutating functions ────────────────────────────────────
-// Wrap renderGrid to also trigger save
+var _remoteUpdate = false; // true while applying remote Firebase data
+
 var _origRenderGrid = renderGrid;
+var _renderGridOnly = function(){ _origRenderGrid(); }; // raw, no save
 renderGrid = function(){
   _origRenderGrid();
-  scheduleSave();
+  if(!_remoteUpdate) scheduleSave();
 };
 
 var _origRenderCompradores = renderCompradores;
+var _renderCompradoresOnly = function(){ _origRenderCompradores(); }; // raw, no save
 renderCompradores = function(){
   _origRenderCompradores();
-  scheduleSave();
+  if(!_remoteUpdate) scheduleSave();
 };
 
 var _origRenderTareas = renderTareas;
 renderTareas = function(){
   _origRenderTareas();
-  scheduleSave();
-  // Also save Mi día immediately (private per-user data)
-  saveMiDia();
+  if(!_remoteUpdate){
+    scheduleSave();
+    saveMiDia();
+  }
 };
 
 var _origRenderCaptaciones = renderCaptaciones;
 renderCaptaciones = function(){
   _origRenderCaptaciones();
-  scheduleSave();
+  if(!_remoteUpdate) scheduleSave();
+};
+
+var _origRenderDetail = renderDetail;
+renderDetail = function(){
+  _origRenderDetail();
+  if(!_remoteUpdate) scheduleSave();
+};
+
+var _origRenderAsesores = renderAsesores;
+renderAsesores = function(){
+  _origRenderAsesores();
+  if(!_remoteUpdate) scheduleSave();
 };
 
 // Initial render
