@@ -2284,6 +2284,33 @@ async function importarDesdeTokko(){
       return;
     }
 
+    // Auto-create asesores from Tokko producers if they don't exist yet
+    var producersAdded = 0;
+    var seenProducers = {};
+    items.forEach(function(p){
+      if(!p.producer || !p.producer.name) return;
+      var pName = p.producer.name.trim();
+      var pEmail = p.producer.email ? p.producer.email.trim().toLowerCase() : '';
+      if(seenProducers[pName]) return;
+      seenProducers[pName] = true;
+      // Check if asesor already exists by name or email
+      var exists = asesores.find(function(a){
+        var aName = a.name.trim().toLowerCase();
+        var aEmail = (a.email||'').trim().toLowerCase();
+        return aName === pName.toLowerCase() || (pEmail && aEmail === pEmail);
+      });
+      if(!exists){
+        var colors = ['#185FA5', '#0F6E56', '#7F77DD', '#EF9F27', '#E24B4A', '#534AB7', '#085041', '#854F0B'];
+        var color = colors[asesores.length % colors.length];
+        asesores.push({id:'a'+(++nextAid), name:pName, email:pEmail, color:color});
+        producersAdded++;
+      }
+    });
+    if(producersAdded > 0){
+      renderAsesores();
+      updAsesorSel();
+    }
+
     // Filter out already imported (by tokko id)
     var existingIds = props.map(function(p){ return p.tokkoId; }).filter(Boolean);
     var nuevas = items.filter(function(p){ return !existingIds.includes(String(p.id)); });
