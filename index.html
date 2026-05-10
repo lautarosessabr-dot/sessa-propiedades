@@ -1124,6 +1124,14 @@ function saveAsesor(){
   asesores.push({id:'a'+(++nextAid), name, color});
   closeModal('asesor'); renderAsesores(); updAsesorSel();
 }
+function updateAsesorEmail(aid, val){
+  var a = asesores.find(function(x){ return x.id===aid; });
+  if(a){
+    a.email = val.trim().toLowerCase();
+    renderAsesores();
+  }
+}
+
 function delAsesor(id){
   if(props.some(p=>p.asesorId===id)){ alert('No podés eliminar un asesor con propiedades asignadas.'); return; }
   asesores = asesores.filter(a=>a.id!==id);
@@ -2302,7 +2310,8 @@ async function importarDesdeTokko(){
       if(!exists){
         var colors = ['#185FA5', '#0F6E56', '#7F77DD', '#EF9F27', '#E24B4A', '#534AB7', '#085041', '#854F0B'];
         var color = colors[asesores.length % colors.length];
-        asesores.push({id:'a'+(++nextAid), name:pName, email:pEmail, color:color});
+        // Use Tokko email as default but admin should update with Firebase login email
+        asesores.push({id:'a'+(++nextAid), name:pName, email:pEmail, color:color, tokkoEmail:pEmail});
         producersAdded++;
       }
     });
