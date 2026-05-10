@@ -2382,6 +2382,7 @@ function confirmarImportTokko(){
   if(!checks.length){ alert('Seleccioná al menos una propiedad.'); return; }
 
   checks.forEach(function(cb){
+    var tk = _tokkoImportData[cb.dataset.id] || {};
     // Try to match producer name to an asesor
     var tkProducerName = tk.producer ? tk.producer.name.trim().toLowerCase() : '';
     var matchedAsesor = asesores.find(function(a){
@@ -2390,7 +2391,6 @@ function confirmarImportTokko(){
              a.name.trim().toLowerCase().indexOf(tkProducerName) >= 0;
     });
     var asesorId = matchedAsesor ? matchedAsesor.id : (getMyAsesor() ? getMyAsesor().id : (asesores[0] ? asesores[0].id : 'a1'));
-    var tk = _tokkoImportData[cb.dataset.id] || {};
 
     // Extract all available fields from Tokko
     var tipo = TOKKO_TIPO_MAP[tk.type ? tk.type.name : ''] || 'Casa';
