@@ -802,10 +802,8 @@ function filtered(){
   const q  = (document.getElementById('search')||{value:''}).value.toLowerCase();
   const ft = (document.getElementById('filt-type')||{value:''}).value;
   const fa = (document.getElementById('filt-asesor')||{value:''}).value;
-  const myAsesorId = currentAsesorId();
   return props.filter(function(p){
-    // Non-admin users only see their own properties
-    if(!isAdmin() && myAsesorId && p.asesorId !== myAsesorId) return false;
+    if(!canViewProp(p)) return false;
     if(ft && p.tipo !== ft) return false;
     if(fa && p.asesorId !== fa) return false;
     if(q && !p.addr.toLowerCase().includes(q) && !p.propietario.toLowerCase().includes(q)) return false;
