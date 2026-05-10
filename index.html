@@ -389,26 +389,40 @@ function currentAsesorId(){
 }
 
 function getMyAsesor(){
-  // Find the asesor whose email matches the logged-in user
-  return asesores.find(function(a){ return a.email && a.email.trim().toLowerCase() === currentUserEmail.trim().toLowerCase(); }) || null;
+  if(!currentUserEmail) return null;
+  var email = currentUserEmail.trim().toLowerCase();
+  // Match by email field on asesor
+  return asesores.find(function(a){ return a.email && a.email.trim().toLowerCase() === email; }) || null;
+}
+
+// Get the display name for the logged-in user (from Firebase Auth)
+function getMyDisplayName(){
+  if(window._fb && window._fb.auth && window._fb.auth.currentUser){
+    return window._fb.auth.currentUser.displayName || '';
+  }
+  return '';
 }
 
 function canViewProp(p){
   if(isAdmin()) return true;
-  var me = getMyAsesor();
-  if(!me) return false;
-  // Match by asesorId
-  if(p.asesorId && p.asesorId === me.id) return true;
-  // Match by tokkoProducerName (case-insensitive)
   var tkName = (p.tokkoProducerName || '').trim().toLowerCase();
-  var meName = me.name.trim().toLowerCase();
-  if(tkName && meName && (tkName === meName || tkName.indexOf(meName) >= 0 || meName.indexOf(tkName) >= 0)) return true;
+  // Find which asesor owns this property by tokkoProducerName
+  var propAsesor = tkName ? asesores.find(function(a){
+    return a.name.trim().toLowerCase() === tkName;
+  }) : null;
+  // Check if current user's email matches that asesor's email
+  if(propAsesor && propAsesor.email && propAsesor.email.trim().toLowerCase() === currentUserEmail.trim().toLowerCase()) return true;
+  // Also match by asesorId for manually created props
+  var me = getMyAsesor();
+  if(me && p.asesorId === me.id) return true;
   return false;
 }
 
 function canEditProp(p){
   return canViewProp(p);
 }
+
+
 
 function isExclusiva(p){
   var t = p.tasks['pre'] && p.tasks['pre'].find(function(x){return x.id==='pre_2';});
