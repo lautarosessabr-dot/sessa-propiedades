@@ -382,6 +382,12 @@ function isAdmin(){
   return currentUserEmail === ADMIN_EMAIL;
 }
 
+function currentAsesorId(){
+  if(!asesores || !currentUserEmail) return null;
+  var a = asesores.find(function(x){ return x.email && x.email.trim().toLowerCase() === currentUserEmail.trim().toLowerCase(); });
+  return a ? a.id : null;
+}
+
 function getMyAsesor(){
   // Find the asesor whose email matches the logged-in user
   return asesores.find(function(a){ return a.email && a.email.trim().toLowerCase() === currentUserEmail.trim().toLowerCase(); }) || null;
@@ -2240,7 +2246,7 @@ var currentUser = null;
 var currentUserEmail = '';
 
 // ── Roles ─────────────────────────────────────────────────────────────────────
-// ADMIN_EMAIL and isAdmin() defined above in permissions section
+// ADMIN_EMAIL, isAdmin() and currentAsesorId() defined above in permissions section
 var syncTimeout = null;
 var unsubscribers = [];
 
