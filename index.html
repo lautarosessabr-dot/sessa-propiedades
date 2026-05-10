@@ -285,6 +285,7 @@ body.dark #dark-toggle{background:#333;border-color:#444;color:#fff;}display:inl
       </select>
       <button class="btn btn-primary" onclick="openModal('prop')">+ Nueva propiedad</button>
       <button class="btn" id="btn-tokko-import" onclick="importarDesdeTokko()" style="background:#fff;border-color:#ddd;color:#555;" title="Importar propiedades desde Tokko Broker">🔄 Importar desde Tokko</button>
+      <button id="btn-ver-todas" onclick="toggleVerTodas()" style="display:none;height:36px;padding:0 14px;font-size:12px;font-weight:600;border-radius:8px;cursor:pointer;font-family:inherit;border:1px solid #ddd;background:#fff;color:#666;white-space:nowrap;">👁 Ver todas</button>
     </div>
     <div class="legend">
       <div class="leg"><div class="leg-dot" style="background:#7F77DD;"></div>Pre-Listing</div>
@@ -596,23 +597,43 @@ function getMyDisplayName(){
   return '';
 }
 
-function canViewProp(p){
+// showAllProps: when true, non-admins see all props (read-only for others)
+var showAllProps = false;
+
+function toggleVerTodas(){
+  showAllProps = !showAllProps;
+  var btn = document.getElementById('btn-ver-todas');
+  if(btn){
+    btn.textContent = showAllProps ? '👤 Mis propiedades' : '👁 Ver todas';
+    btn.style.background = showAllProps ? '#FAEEDA' : '#fff';
+    btn.style.borderColor = showAllProps ? '#854F0B' : '#ddd';
+    btn.style.color = showAllProps ? '#633806' : '#666';
+  }
+  renderGrid();
+  renderDetail();
+}
+
+function isMyProp(p){
   if(isAdmin()) return true;
-  var tkName = (p.tokkoProducerName || '').trim().toLowerCase();
-  // Find which asesor owns this property by tokkoProducerName
-  var propAsesor = tkName ? asesores.find(function(a){
-    return a.name.trim().toLowerCase() === tkName;
-  }) : null;
-  // Check if current user's email matches that asesor's email
-  if(propAsesor && propAsesor.email && propAsesor.email.trim().toLowerCase() === currentUserEmail.trim().toLowerCase()) return true;
-  // Also match by asesorId for manually created props
   var me = getMyAsesor();
-  if(me && p.asesorId === me.id) return true;
+  if(!me) return false;
+  // Match by tokkoProducerName (exact, case-insensitive)
+  var tkName = (p.tokkoProducerName||'').trim().toLowerCase();
+  var meName = me.name.trim().toLowerCase();
+  if(tkName && meName && tkName === meName) return true;
+  // Match by asesorId
+  if(p.asesorId && p.asesorId === me.id) return true;
   return false;
 }
 
+function canViewProp(p){
+  if(isAdmin()) return true;
+  if(showAllProps) return true; // user chose to see all
+  return isMyProp(p);
+}
+
 function canEditProp(p){
-  return canViewProp(p);
+  return isMyProp(p);
 }
 
 
@@ -642,7 +663,7 @@ function isReservaComp(p){
 // ── Interacciones ─────────────────────────────────────────────────────────────
 function toggle(pid, eid, tid){
   const p = props.find(x=>x.id===pid); if(!p) return;
-  if(!canEditProp(p)){ alert('No tenés permiso para modificar esta propiedad.'); return; }
+  if(!canEditProp(p)){ return; } // silent block for read-only view
   // Track reservas when c_reserva_aceptada_vendedor is toggled on
   if(tid==='c_reserva_aceptada_vendedor'){
     var t2 = p.tasks[eid] ? p.tasks[eid].find(function(x){return x.id===tid;}) : null;
@@ -1059,6 +1080,8 @@ function updStats(){
   if(asesorTab) asesorTab.style.display = isAdmin() ? '' : 'none';
   var statsTab = document.getElementById('tab-btn-stats');
   if(statsTab) statsTab.style.display = isAdmin() ? '' : 'none';
+  var verTodasBtn = document.getElementById('btn-ver-todas');
+  if(verTodasBtn) verTodasBtn.style.display = isAdmin() ? 'none' : 'flex';
 
 
   const act = props.filter(function(p){ return !p.finalizada && canViewProp(p); }).length;
@@ -3403,11 +3426,7 @@ function renderDetail(){
         '<span style="color:#e0ddd8;">|</span>'+
         '<span style="display:flex;align-items:center;gap:5px;">'+
           '<span style="font-size:11px;color:#888;white-space:nowrap;">Propietario:</span>'+
-          '<input type="text" placeholder="Nombre" value="'+p.propietario+'" id="prop-inp-'+p.id+'" '+
-          '" id="prop-inp-'+p.id+'" '+
-          'style="font-size:12px;padding:2px 7px;height:24px;border:1px solid #ddd;border-radius:6px;background:#fff;color:#1a1a1a;outline:none;width:140px;font-family:inherit;font-weight:600;" '+
-          'onchange="(function(v){var px=props.find(function(x){return x.id==='+p.id+';});if(px){px.propietario=v;}})(this.value)" '+
-          'onclick="event.stopPropagation()"/>'+
+          '<span style="font-size:12px;font-weight:600;color:#1a1a1a;">'+p.propietario+'</span>'+
         '</span>'+
         '<span style="display:flex;align-items:center;gap:5px;">'+
           '<span style="font-size:11px;color:#888;white-space:nowrap;">Teléfono:</span>'+
@@ -3532,11 +3551,9 @@ function renderDetail(){
   // Barra de progreso
   h += '<div class="prog-bar"><div class="prog-fill" style="width:'+pc+'%;background:'+(p.finalizada?'#1D9E75':s.fill)+';"></div></div>';
 
-  // Read-only notice for admin viewing another asesor's prop
-  if(isAdmin() && !canEditProp(p)){
-    // Admin can see but shouldn't normally be here as we block canEdit
-  } else if(!canEditProp(p)){
-    h += '<div style="background:#FAEEDA;border:1px solid #854F0B;border-radius:10px;padding:8px 14px;margin-bottom:12px;font-size:12px;color:#633806;font-weight:600;">👁 Solo lectura — esta propiedad no es tuya</div>';
+  // Read-only notice when viewing someone else's property
+  if(!isAdmin() && !isMyProp(p)){
+    h += '<div style="background:#FAEEDA;border:1px solid #854F0B;border-radius:10px;padding:8px 14px;margin-bottom:12px;font-size:12px;color:#633806;font-weight:600;">👁 Solo lectura — podés ver pero no modificar esta propiedad</div>';
   }
 
   // Pastillas de info
