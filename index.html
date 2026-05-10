@@ -181,6 +181,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .asesor-name{font-size:14px;color:#1a1a1a;font-weight:600;}
 .asesor-count{font-size:11px;color:#999;margin-top:1px;}
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
 
@@ -215,6 +216,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <button class="tab" onclick="setTab('compradores',this)">Compradores</button>
     <button class="tab" onclick="setTab('tareas',this)">📋 Mi día</button>
     <button class="tab" id="tab-btn-asesores" onclick="setTab('asesores',this)">Asesores</button>
+    <button class="tab" id="tab-btn-stats" onclick="setTab('stats',this)">📊 Estadísticas</button>
+    <button class="tab" onclick="setTab('captaciones',this)">🎯 Captaciones</button>
   </div>
   <div id="tab-props">
     <div class="toolbar">
@@ -251,6 +254,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
   <div id="tab-tareas" style="display:none;">
     <div id="tareas-content"></div>
+  </div>
+
+  <div id="tab-captaciones" style="display:none;">
+    <div id="captaciones-content"></div>
+  </div>
+
+  <div id="tab-stats" style="display:none;">
+    <div id="stats-content"></div>
   </div>
 
   <div id="tab-asesores" style="display:none;">
@@ -844,6 +855,8 @@ function updStats(){
   // Show/hide admin-only UI
   var asesorTab = document.getElementById('tab-btn-asesores');
   if(asesorTab) asesorTab.style.display = isAdmin() ? '' : 'none';
+  var statsTab = document.getElementById('tab-btn-stats');
+  if(statsTab) statsTab.style.display = isAdmin() ? '' : 'none';
 
 
   const act = props.filter(function(p){ return !p.finalizada && canViewProp(p); }).length;
@@ -977,9 +990,13 @@ function setTab(tab, el){
   document.getElementById('tab-compradores').style.display  = tab==='compradores' ? '' : 'none';
   document.getElementById('tab-tareas').style.display       = tab==='tareas'      ? '' : 'none';
   document.getElementById('tab-asesores').style.display     = tab==='asesores'    ? '' : 'none';
+  document.getElementById('tab-stats').style.display        = tab==='stats'       ? '' : 'none';
   if(tab==='asesores')    renderAsesores();
   if(tab==='compradores') renderCompradores();
   if(tab==='tareas')      renderTareas();
+  if(tab==='stats')       renderStats();
+  if(tab==='captaciones')  renderCaptaciones();
+  document.getElementById('tab-captaciones').style.display = tab==='captaciones' ? '' : 'none';
 }
 
 // ── Modales ───────────────────────────────────────────────────────────────────
@@ -1867,6 +1884,975 @@ function renderTareas(){
 }
 
 
+
+// ── ESTADÍSTICAS ──────────────────────────────────────────────────────────────
+
+var statsFilter = 'all'; // 'all' | 'year' | 'month-YYYY-MM'
+
+function setStatsFilter(f){
+  statsFilter = f;
+  renderStats();
+}
+
+function propMatchesFilter(p){
+  // Use ingreso date (when it entered the system)
+  if(statsFilter === 'all') return true;
+  var dateStr = p.ingreso || '';
+  if(!dateStr) return statsFilter === 'all';
+  var parts = dateStr.split('/');
+  if(parts.length < 3) return false;
+  var d = new Date(parseInt(parts[2]), parseInt(parts[1])-1, parseInt(parts[0]));
+  var now = new Date();
+  if(statsFilter === 'year') return d.getFullYear() === now.getFullYear();
+  if(statsFilter.startsWith('month-')){
+    var ym = statsFilter.replace('month-','').split('-');
+    return d.getFullYear()===parseInt(ym[0]) && (d.getMonth()+1)===parseInt(ym[1]);
+  }
+  return true;
+}
+
+function renderStats(){
+  var el = document.getElementById('stats-content'); if(!el) return;
+
+  var now = Date.now();
+  var hoy = new Date().toLocaleDateString('es-AR',{day:'numeric',month:'long',year:'numeric'});
+  var nowYear = new Date().getFullYear();
+  var nowMonth = new Date().getMonth()+1;
+
+  // Build month options from ingreso dates
+  var monthSet = {};
+  props.forEach(function(p){
+    if(!p.ingreso) return;
+    var parts = p.ingreso.split('/');
+    if(parts.length<3) return;
+    var key = parts[2]+'-'+parts[1];
+    var label = new Date(parseInt(parts[2]),parseInt(parts[1])-1,1)
+      .toLocaleDateString('es-AR',{month:'long',year:'numeric'});
+    monthSet[key] = label.charAt(0).toUpperCase()+label.slice(1);
+  });
+  var monthKeys = Object.keys(monthSet).sort().reverse();
+
+  // ── Calcular métricas con filtro ──────────────────────────────────────────
+  var filteredProps = props.filter(propMatchesFilter);
+  var filteredComp  = compradores.filter(function(c){
+    if(statsFilter==='all') return true;
+    var dateStr = c.fechaReserva||'';
+    if(!dateStr) return false;
+    var parts = dateStr.split('/');
+    if(parts.length<3) return false;
+    var d = new Date(parseInt(parts[2]),parseInt(parts[1])-1,parseInt(parts[0]));
+    if(statsFilter==='year') return d.getFullYear()===nowYear;
+    if(statsFilter.startsWith('month-')){
+      var ym=statsFilter.replace('month-','').split('-');
+      return d.getFullYear()===parseInt(ym[0])&&(d.getMonth()+1)===parseInt(ym[1]);
+    }
+    return true;
+  });
+
+  var propsActivas     = filteredProps.filter(function(p){ return !p.finalizada; });
+  var propsFinalizadas = filteredProps.filter(function(p){ return p.finalizada; });
+  var compActivos      = filteredComp.filter(function(c){ return !c.finalizada; });
+  var compFinalizados  = filteredComp.filter(function(c){ return c.finalizada; });
+
+  // Por etapa
+  var byEtapa = {pre:0, mkt:0, seg:0, cierre:0};
+  propsActivas.forEach(function(p){ var s = stg(p); if(s) byEtapa[s.id] = (byEtapa[s.id]||0)+1; });
+
+  // Por tipo
+  var byTipo = {};
+  props.forEach(function(p){ byTipo[p.tipo] = (byTipo[p.tipo]||0)+1; });
+
+  // Inactivas +14d
+  var inactivas = propsActivas.filter(function(p){ var d=diasSinContacto(p); return d!==null && d>=14; });
+
+  // Sin contacto registrado
+  var sinContacto = propsActivas.filter(function(p){ return !p.lastContacto; });
+
+  // Estado precio
+  var enPrecio=0, arribaP=0, fueraPrecio=0, sinEvaluar=0;
+  propsActivas.forEach(function(p){
+    var t = p.tasks && p.tasks.seg ? p.tasks.seg.find(function(x){return x.id==='seg_3';}) : null;
+    var v = t ? t.precioVal : '';
+    if(v==='en-precio') enPrecio++;
+    else if(v==='arriba') arribaP++;
+    else if(v==='fuera-precio') fueraPrecio++;
+    else sinEvaluar++;
+  });
+
+  // Exclusivas
+  var exclusivas = propsActivas.filter(function(p){
+    var t = p.tasks && p.tasks.pre ? p.tasks.pre.find(function(x){return x.id==='pre_2';}) : null;
+    return t && t.autoVal === 'exclusiva';
+  });
+
+  // Por asesor
+  var byAsesor = {};
+  asesores.forEach(function(a){ byAsesor[a.id] = {name:a.name, color:a.color, activas:0, fin:0, inac:0, cierre:0}; });
+  propsActivas.forEach(function(p){
+    // find by tokkoProducerName or asesorId
+    var tkName = (p.tokkoProducerName||'').trim().toLowerCase();
+    var a = asesores.find(function(x){ return x.name.trim().toLowerCase()===tkName; }) ||
+            asesores.find(function(x){ return x.id===p.asesorId; });
+    if(a && byAsesor[a.id]){
+      byAsesor[a.id].activas++;
+      var d = diasSinContacto(p); if(d!==null && d>=14) byAsesor[a.id].inac++;
+      var s = stg(p); if(s && s.id==='cierre') byAsesor[a.id].cierre++;
+    }
+  });
+  propsFinalizadas.forEach(function(p){
+    var tkName = (p.tokkoProducerName||'').trim().toLowerCase();
+    var a = asesores.find(function(x){ return x.name.trim().toLowerCase()===tkName; }) ||
+            asesores.find(function(x){ return x.id===p.asesorId; });
+    if(a && byAsesor[a.id]) byAsesor[a.id].fin++;
+  });
+
+  // Operaciones cerradas por mes (props + compradores)
+  var mesesMap = {};
+  propsFinalizadas.concat(compFinalizados).forEach(function(p){
+    if(!p.fechaFin) return;
+    var parts = p.fechaFin.split(' de ');
+    if(parts.length<3) return;
+    var key = parts[1]+' '+parts[2];
+    mesesMap[key] = (mesesMap[key]||0)+1;
+  });
+  var meses = Object.keys(mesesMap).slice(-6);
+
+  // ── HTML ──────────────────────────────────────────────────────────────────
+  var h = '<div style="padding-bottom:40px;">';
+
+  // ── Filter bar ────────────────────────────────────────────────────────────
+  h += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:20px;padding:12px 16px;background:#fff;border:1px solid #eee;border-radius:12px;">';
+  h += '<span style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-right:4px;">Período:</span>';
+
+  function filterBtn(val, label){
+    var active = statsFilter===val;
+    return '<button data-sf="'+val+'" onclick="setStatsFilter(this.dataset.sf)" style="height:28px;padding:0 12px;font-size:12px;font-weight:'+(active?'700':'500')+';border-radius:20px;cursor:pointer;font-family:inherit;border:1.5px solid '+(active?'#185FA5':'#ddd')+';background:'+(active?'#E6F1FB':'#fff')+';color:'+(active?'#0C447C':'#666')+';white-space:nowrap;">'+label+'</button>';
+  }
+
+  h += filterBtn('all', 'Desde siempre');
+  h += filterBtn('year', 'Este año ('+nowYear+')');
+  h += filterBtn('month-'+nowYear+'-'+String(nowMonth).padStart(2,'0'), 'Este mes');
+
+  // Previous months
+  monthKeys.slice(0,6).forEach(function(key){
+    var ym = key.split('-');
+    var curKey = nowYear+'-'+String(nowMonth).padStart(2,'0');
+    if(key===curKey) return; // already shown as "Este mes"
+    h += filterBtn('month-'+key, monthSet[key]);
+  });
+
+  h += '</div>';
+  h += '<div style="font-size:11px;color:#aaa;margin-bottom:20px;">Actualizado: '+hoy+'</div>';
+
+  // ── Fila 1: KPIs principales ──────────────────────────────────────────────
+  function kpi(val, label, color, sub){
+    return '<div style="flex:1;min-width:130px;background:#fff;border:1px solid #eee;border-radius:14px;padding:18px 16px;text-align:center;border-top:3px solid '+color+';">'+
+      '<div style="font-size:32px;font-weight:800;color:'+color+';">'+val+'</div>'+
+      '<div style="font-size:12px;color:#666;margin-top:4px;font-weight:600;">'+label+'</div>'+
+      (sub?'<div style="font-size:10px;color:#aaa;margin-top:2px;">'+sub+'</div>':'')+
+    '</div>';
+  }
+
+  h += '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:24px;">'+
+    kpi(props.length, 'Propiedades totales', '#185FA5', propsActivas.length+' activas · '+propsFinalizadas.length+' cerradas')+
+    kpi(exclusivas.length, 'Exclusivas activas', '#EF9F27', Math.round(exclusivas.length/Math.max(propsActivas.length,1)*100)+'% de la cartera')+
+    kpi(inactivas.length, 'Inactivas +14d', '#E24B4A', 'sin contacto hace 2+ semanas')+
+    kpi(compradores.length, 'Compradores', '#0F6E56', compActivos.length+' activos · '+compFinalizados.length+' cerrados')+
+  '</div>';
+
+  // ── Fila 2: Pipeline ──────────────────────────────────────────────────────
+  h += '<div style="background:#fff;border:1px solid #eee;border-radius:14px;padding:20px;margin-bottom:24px;">'+
+    '<div style="font-size:13px;font-weight:700;color:#1a1a1a;margin-bottom:16px;">🔄 Pipeline de propiedades activas</div>'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;">';
+
+  var etapas = [
+    {id:'pre',    label:'Pre-Listing',         color:'#534AB7', bg:'#EEEDFE'},
+    {id:'mkt',    label:'Prod. y Marketing',   color:'#185FA5', bg:'#E6F1FB'},
+    {id:'seg',    label:'Seguimiento',          color:'#854F0B', bg:'#FAEEDA'},
+    {id:'cierre', label:'Cierre',               color:'#085041', bg:'#E1F5EE'},
+  ];
+  etapas.forEach(function(e){
+    var n = byEtapa[e.id]||0;
+    var pct = Math.round(n/Math.max(propsActivas.length,1)*100);
+    h += '<div style="flex:1;min-width:120px;background:'+e.bg+';border:1px solid '+e.color+'33;border-radius:12px;padding:14px;text-align:center;">'+
+      '<div style="font-size:26px;font-weight:800;color:'+e.color+';">'+n+'</div>'+
+      '<div style="font-size:11px;color:'+e.color+';font-weight:600;margin-top:2px;">'+e.label+'</div>'+
+      '<div style="font-size:10px;color:'+e.color+'99;margin-top:2px;">'+pct+'%</div>'+
+    '</div>';
+  });
+  h += '</div></div>';
+
+  // ── Fila 3: Por asesor ────────────────────────────────────────────────────
+  h += '<div style="background:#fff;border:1px solid #eee;border-radius:14px;padding:20px;margin-bottom:24px;">'+
+    '<div style="font-size:13px;font-weight:700;color:#1a1a1a;margin-bottom:16px;">👥 Producción por asesor</div>'+
+    '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;">'+
+    '<thead><tr style="border-bottom:2px solid #eee;">'+
+      '<th style="text-align:left;padding:8px 12px;color:#888;font-weight:600;">Asesor</th>'+
+      '<th style="text-align:center;padding:8px;color:#888;font-weight:600;">Activas</th>'+
+      '<th style="text-align:center;padding:8px;color:#888;font-weight:600;">En cierre</th>'+
+      '<th style="text-align:center;padding:8px;color:#888;font-weight:600;">Cerradas</th>'+
+      '<th style="text-align:center;padding:8px;color:#888;font-weight:600;">Inactivas</th>'+
+    '</tr></thead><tbody>';
+
+  asesores.forEach(function(a){
+    var d = byAsesor[a.id]||{activas:0,fin:0,inac:0,cierre:0};
+    h += '<tr style="border-bottom:1px solid #f5f5f5;">'+
+      '<td style="padding:10px 12px;"><div style="display:flex;align-items:center;gap:8px;">'+
+        '<div style="width:10px;height:10px;border-radius:50%;background:'+a.color+';flex-shrink:0;"></div>'+
+        '<span style="font-weight:600;">'+a.name+'</span>'+
+      '</div></td>'+
+      '<td style="text-align:center;padding:10px;font-weight:700;color:#185FA5;">'+d.activas+'</td>'+
+      '<td style="text-align:center;padding:10px;font-weight:700;color:#085041;">'+d.cierre+'</td>'+
+      '<td style="text-align:center;padding:10px;font-weight:700;color:#1D9E75;">'+d.fin+'</td>'+
+      '<td style="text-align:center;padding:10px;font-weight:'+(d.inac>0?'700':'400')+';color:'+(d.inac>0?'#E24B4A':'#aaa')+';">'+d.inac+'</td>'+
+    '</tr>';
+  });
+  h += '</tbody></table></div></div>';
+
+  // ── Fila 4: Estado de precios + Tipos ─────────────────────────────────────
+  h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px;">';
+
+  // Estado de precios
+  h += '<div style="background:#fff;border:1px solid #eee;border-radius:14px;padding:20px;">'+
+    '<div style="font-size:13px;font-weight:700;color:#1a1a1a;margin-bottom:14px;">💰 Estado de precios</div>';
+  function precioRow(label, n, color){
+    var pct = Math.round(n/Math.max(propsActivas.length,1)*100);
+    return '<div style="margin-bottom:10px;">'+
+      '<div style="display:flex;justify-content:space-between;margin-bottom:3px;">'+
+        '<span style="font-size:12px;font-weight:600;color:#444;">'+label+'</span>'+
+        '<span style="font-size:12px;font-weight:700;color:'+color+';">'+n+' <span style="color:#aaa;font-weight:400;">('+pct+'%)</span></span>'+
+      '</div>'+
+      '<div style="height:6px;background:#f0ede8;border-radius:3px;overflow:hidden;">'+
+        '<div style="height:100%;width:'+pct+'%;background:'+color+';border-radius:3px;"></div>'+
+      '</div>'+
+    '</div>';
+  }
+  h += precioRow('🟢 En precio', enPrecio, '#1D9E75');
+  h += precioRow('🟡 10% arriba', arribaP, '#EF9F27');
+  h += precioRow('🔴 Fuera de precio', fueraPrecio, '#E24B4A');
+  h += precioRow('⚪ Sin evaluar', sinEvaluar, '#ccc');
+  h += '</div>';
+
+  // Por tipo de propiedad
+  h += '<div style="background:#fff;border:1px solid #eee;border-radius:14px;padding:20px;">'+
+    '<div style="font-size:13px;font-weight:700;color:#1a1a1a;margin-bottom:14px;">🏠 Por tipo de propiedad</div>';
+  var tipoColors = {Casa:'#185FA5',Dpto:'#0F6E56',PH:'#7F77DD',Lote:'#EF9F27',Galpon:'#854F0B',Local:'#E24B4A',Monoambiente:'#534AB7'};
+  var sortedTipos = Object.keys(byTipo).sort(function(a,b){return byTipo[b]-byTipo[a];});
+  sortedTipos.forEach(function(tipo){
+    var n = byTipo[tipo];
+    var pct = Math.round(n/Math.max(props.length,1)*100);
+    var color = tipoColors[tipo]||'#888';
+    h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'+
+      '<div style="width:10px;height:10px;border-radius:50%;background:'+color+';flex-shrink:0;"></div>'+
+      '<span style="font-size:12px;flex:1;color:#444;font-weight:600;">'+tipo+'</span>'+
+      '<span style="font-size:12px;font-weight:700;color:'+color+';">'+n+'</span>'+
+      '<div style="width:80px;height:6px;background:#f0ede8;border-radius:3px;overflow:hidden;">'+
+        '<div style="height:100%;width:'+pct+'%;background:'+color+';border-radius:3px;"></div>'+
+      '</div>'+
+    '</div>';
+  });
+  h += '</div></div>';
+
+  // ── Fila 5: Alertas ───────────────────────────────────────────────────────
+  if(inactivas.length || sinContacto.length){
+    h += '<div style="background:#fff;border:1px solid #E24B4A33;border-radius:14px;padding:20px;margin-bottom:24px;">'+
+      '<div style="font-size:13px;font-weight:700;color:#A32D2D;margin-bottom:14px;">⚠️ Propiedades que necesitan atención</div>';
+
+    if(inactivas.length){
+      h += '<div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">Sin contacto hace +14 días</div>';
+      inactivas.sort(function(a,b){ return diasSinContacto(b)-diasSinContacto(a); });
+      inactivas.slice(0,8).forEach(function(p){
+        var d = diasSinContacto(p);
+        var a = asesores.find(function(x){ return x.name.trim().toLowerCase()===(p.tokkoProducerName||'').trim().toLowerCase(); }) || getA(p.asesorId);
+        h += '<div style="display:flex;align-items:center;gap:10px;padding:7px 10px;background:#FFF5F5;border-radius:8px;margin-bottom:5px;">'+
+          '<div style="width:8px;height:8px;border-radius:50%;background:#E24B4A;flex-shrink:0;"></div>'+
+          '<span style="flex:1;font-size:12px;font-weight:600;color:#1a1a1a;">'+p.addr+'</span>'+
+          '<span style="font-size:11px;color:#888;">'+a.name+'</span>'+
+          '<span style="font-size:11px;font-weight:700;color:#A32D2D;background:#FCEBEB;padding:2px 8px;border-radius:10px;">'+d+'d</span>'+
+        '</div>';
+      });
+      if(inactivas.length>8) h += '<div style="font-size:11px;color:#aaa;margin-top:4px;">...y '+(inactivas.length-8)+' más</div>';
+    }
+
+    if(sinContacto.length){
+      h += '<div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin:12px 0 8px;">Sin fecha de último contacto</div>';
+      sinContacto.slice(0,5).forEach(function(p){
+        var a = asesores.find(function(x){ return x.name.trim().toLowerCase()===(p.tokkoProducerName||'').trim().toLowerCase(); }) || getA(p.asesorId);
+        h += '<div style="display:flex;align-items:center;gap:10px;padding:7px 10px;background:#FFFBF0;border-radius:8px;margin-bottom:5px;">'+
+          '<div style="width:8px;height:8px;border-radius:50%;background:#EF9F27;flex-shrink:0;"></div>'+
+          '<span style="flex:1;font-size:12px;font-weight:600;color:#1a1a1a;">'+p.addr+'</span>'+
+          '<span style="font-size:11px;color:#888;">'+a.name+'</span>'+
+        '</div>';
+      });
+      if(sinContacto.length>5) h += '<div style="font-size:11px;color:#aaa;margin-top:4px;">...y '+(sinContacto.length-5)+' más</div>';
+    }
+    h += '</div>';
+  }
+
+  // ── Botón de informe mensual ─────────────────────────────────────────────
+  var periodoLabel = statsFilter==='all' ? 'general' :
+                     statsFilter==='year' ? String(new Date().getFullYear()) :
+                     statsFilter.startsWith('month-') ?
+                       (function(){ var ym=statsFilter.replace('month-','').split('-');
+                         return new Date(parseInt(ym[0]),parseInt(ym[1])-1,1)
+                           .toLocaleDateString('es-AR',{month:'long',year:'numeric'}); })() : '';
+
+  // Export backup button
+  h += '<div style="margin-top:16px;text-align:right;">'+
+    '<button onclick="exportarBackupExcel()" '+
+    'style="height:34px;padding:0 16px;font-size:12px;font-weight:600;border:1px solid #0F6E56;border-radius:8px;background:#E1F5EE;color:#085041;cursor:pointer;font-family:inherit;">'+
+    '💾 Exportar backup completo (.xlsx)</button>'+
+  '</div>';
+
+  h += '<div style="margin-top:32px;padding:24px;background:linear-gradient(135deg,#1E3A5F,#185FA5);border-radius:16px;text-align:center;">'+
+    '<div style="font-size:15px;font-weight:700;color:#fff;margin-bottom:6px;">📋 Informe mensual</div>'+
+    '<div style="font-size:12px;color:#A8C4E0;margin-bottom:16px;">Generá un resumen listo para compartir por WhatsApp o email</div>'+
+    '<button onclick="generarInforme()" '+
+    'style="height:40px;padding:0 28px;font-size:13px;font-weight:700;border:none;border-radius:10px;background:#fff;color:#185FA5;cursor:pointer;font-family:inherit;">'+
+    '📋 Generar informe — '+periodoLabel+'</button>'+
+  '</div>';
+
+  h += '</div>';
+  el.innerHTML = h;
+}
+
+function copyInforme(){
+  var t = document.getElementById('informe-txt');
+  if(!t) return;
+  navigator.clipboard.writeText(t.value).then(function(){
+    var b = document.querySelector('#informe-overlay .resumen-actions button:last-child');
+    if(b){ b.textContent='Copiado!'; b.style.background='#E1F5EE'; b.style.borderColor='#0F6E56'; b.style.color='#085041';
+      setTimeout(function(){ b.textContent='Copiar'; b.style.background='#E6F1FB'; b.style.borderColor='#185FA5'; b.style.color='#0C447C'; }, 2000); }
+  }).catch(function(){ t.select(); document.execCommand('copy'); });
+}
+
+function closeInformeModal(){
+  var el = document.getElementById('informe-overlay');
+  if(el) el.remove();
+}
+
+function generarInforme(){
+  var now = new Date();
+  var periodoLabel = statsFilter==='all' ? 'Histórico completo' :
+                     statsFilter==='year' ? 'Año '+now.getFullYear() :
+                     statsFilter.startsWith('month-') ?
+                       (function(){ var ym=statsFilter.replace('month-','').split('-');
+                         var d = new Date(parseInt(ym[0]),parseInt(ym[1])-1,1);
+                         var l = d.toLocaleDateString('es-AR',{month:'long',year:'numeric'});
+                         return l.charAt(0).toUpperCase()+l.slice(1); })() : 'Período';
+
+  var filteredProps = props.filter(propMatchesFilter);
+  var propsActivas     = filteredProps.filter(function(p){ return !p.finalizada; });
+  var propsFinalizadas = filteredProps.filter(function(p){ return p.finalizada; });
+
+  var filteredComp = compradores.filter(function(c){
+    if(statsFilter==='all') return true;
+    var dateStr = c.fechaReserva||''; if(!dateStr) return false;
+    var parts = dateStr.split('/'); if(parts.length<3) return false;
+    var d = new Date(parseInt(parts[2]),parseInt(parts[1])-1,parseInt(parts[0]));
+    var ny = now.getFullYear(), nm = now.getMonth()+1;
+    if(statsFilter==='year') return d.getFullYear()===ny;
+    if(statsFilter.startsWith('month-')){
+      var ym=statsFilter.replace('month-','').split('-');
+      return d.getFullYear()===parseInt(ym[0])&&(d.getMonth()+1)===parseInt(ym[1]);
+    }
+    return true;
+  });
+  var compFinalizados = filteredComp.filter(function(c){ return c.finalizada; });
+
+  // Inactivas
+  var inactivas = propsActivas.filter(function(p){ var d=diasSinContacto(p); return d!==null&&d>=14; });
+
+  // Estado precio
+  var enPrecio=0, fueraPrecio=0;
+  propsActivas.forEach(function(p){
+    var t = p.tasks&&p.tasks.seg ? p.tasks.seg.find(function(x){return x.id==='seg_3';}) : null;
+    if(t&&t.precioVal==='en-precio') enPrecio++;
+    if(t&&t.precioVal==='fuera-precio') fueraPrecio++;
+  });
+
+  // Exclusivas
+  var exclusivas = propsActivas.filter(function(p){
+    var t = p.tasks&&p.tasks.pre ? p.tasks.pre.find(function(x){return x.id==='pre_2';}) : null;
+    return t&&t.autoVal==='exclusiva';
+  });
+
+  // Por asesor
+  var asesorLines = '';
+  asesores.forEach(function(a){
+    var tkName = a.name.trim().toLowerCase();
+    var mis = filteredProps.filter(function(p){
+      return (p.tokkoProducerName||'').trim().toLowerCase()===tkName ||
+             p.asesorId===a.id;
+    });
+    var act = mis.filter(function(p){return !p.finalizada;}).length;
+    var fin = mis.filter(function(p){return p.finalizada;}).length;
+    var inac = mis.filter(function(p){var d=diasSinContacto(p);return !p.finalizada&&d!==null&&d>=14;}).length;
+    if(act>0||fin>0){
+      asesorLines += '👤 '+a.name+': '+act+' activa'+(act!==1?'s':'');
+      if(fin>0) asesorLines += ' · '+fin+' cerrada'+(fin!==1?'s':'');
+      if(inac>0) asesorLines += ' · ⚠ '+inac+' inactiva'+(inac!==1?'s':'');
+      asesorLines += '\n';
+    }
+  });
+
+  // Pipeline
+  var byEtapa = {pre:0,mkt:0,seg:0,cierre:0};
+  propsActivas.forEach(function(p){ var s=stg(p); if(s) byEtapa[s.id]=(byEtapa[s.id]||0)+1; });
+
+  var fechaHoy = now.toLocaleDateString('es-AR',{day:'numeric',month:'long',year:'numeric'});
+
+  var sep = '------------------------';
+  var informe = [
+    'INFORME SESSA PROPIEDADES',
+    periodoLabel + ' - ' + fechaHoy,
+    sep,
+    '',
+    'RESUMEN GENERAL',
+    '- Propiedades activas: ' + propsActivas.length,
+    '- Operaciones cerradas: ' + (propsFinalizadas.length + compFinalizados.length),
+    '- Compradores activos: ' + filteredComp.filter(function(c){return !c.finalizada;}).length,
+    '- Exclusivas en cartera: ' + exclusivas.length,
+    '',
+    'PIPELINE',
+    '- Pre-Listing: ' + byEtapa.pre,
+    '- Produccion y Marketing: ' + byEtapa.mkt,
+    '- Seguimiento: ' + byEtapa.seg,
+    '- En cierre: ' + byEtapa.cierre,
+    '',
+    'ESTADO DE PRECIOS',
+    '- En precio: ' + enPrecio,
+    '- Fuera de precio: ' + fueraPrecio,
+    '',
+    'POR ASESOR',
+    asesorLines.trim(),
+  ];
+  if(inactivas.length){
+    informe.push('');
+    informe.push('ALERTAS');
+    informe.push('- ' + inactivas.length + ' propiedad' + (inactivas.length!==1?'es':'') + ' sin contacto hace +14 dias');
+  }
+  informe.push('');
+  informe.push(sep);
+  informe.push('Generado desde Sessa Propiedades Tracker');
+  informe = informe.join('\n');
+
+  // Show modal with copy button
+  var existing = document.getElementById('informe-overlay');
+  if(existing) existing.remove();
+  var overlay = document.createElement('div');
+  overlay.id = 'informe-overlay';
+  overlay.className = 'resumen-overlay';
+  overlay.onclick = function(e){ if(e.target===overlay) overlay.remove(); };
+  overlay.innerHTML =
+    '<div class="resumen-modal" style="max-width:520px;">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">'+
+        '<h3 style="font-size:15px;font-weight:700;color:#1a1a1a;">📋 Informe — '+periodoLabel+'</h3>'+
+        '<button onclick="closeInformeModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#888;">×</button>'+
+      '</div>'+
+      '<textarea id="informe-txt" class="resumen-textarea" rows="18" style="font-family:monospace;font-size:12px;line-height:1.6;background:#fafaf8;">'+informe+'</textarea>'+
+      '<div class="resumen-actions" style="margin-top:10px;">'+
+        '<button onclick="closeInformeModal()" style="height:34px;padding:0 14px;font-size:12px;border:1px solid #ddd;border-radius:8px;background:#fff;cursor:pointer;font-family:inherit;">Cerrar</button>'+
+        '<button onclick="copyInforme()" style="height:34px;padding:0 16px;font-size:12px;font-weight:700;border:1px solid #185FA5;border-radius:8px;background:#E6F1FB;color:#0C447C;cursor:pointer;font-family:inherit;">📋 Copiar</button>'+
+        'style="height:34px;padding:0 16px;font-size:12px;font-weight:700;border:1px solid #185FA5;border-radius:8px;background:#E6F1FB;color:#0C447C;cursor:pointer;font-family:inherit;">📋 Copiar</button>'+
+      '</div>'+
+    '</div>';
+  document.body.appendChild(overlay);
+}
+
+
+// ── CAPTACIONES ───────────────────────────────────────────────────────────────
+
+var captaciones = [];
+var nextCapId = 1;
+var activeCap = null;
+
+function mkCaptacion(id, d){
+  return {
+    id:       id,
+    nombre:   d.nombre   || '',
+    telefono: d.telefono || '',
+    mail:     d.mail     || '',
+    asesorId: d.asesorId || '',
+    asesorName: d.asesorName || '',
+    createdAt: d.createdAt || Date.now(),  // timestamp of creation
+    comentarios: d.comentarios || '',
+    estado:   d.estado   || 'activa',  // activa | captada | perdida
+  };
+}
+
+function diasRestantesCap(c){
+  var week = 7 * 24 * 60 * 60 * 1000;
+  var elapsed = Date.now() - c.createdAt;
+  var remaining = Math.ceil((week - elapsed) / 86400000);
+  return remaining;
+}
+
+function renovarCap(id){
+  var c = captaciones.find(function(x){return x.id===id;}); if(!c) return;
+  c.createdAt = Date.now();
+  renderCaptaciones();
+  renderCapDetail();
+}
+
+function cerrarCap(id, estadoCode){
+  var c = captaciones.find(function(x){return x.id===id;}); if(!c) return;
+  var estados = {1:'activa', 2:'captada', 3:'perdida'};
+  var estado = estados[estadoCode] || 'activa';
+  c.estado = estado;
+  activeCap = null;
+  renderCaptaciones();
+  renderCapDetail();
+}
+
+function eliminarCap(id){
+  // Only admin can fully delete; others just archive
+  if(isAdmin()){
+    if(!confirm('¿Eliminar permanentemente esta captación?')) return;
+    captaciones = captaciones.filter(function(x){return x.id!==id;});
+    if(activeCap===id) activeCap=null;
+  } else {
+    if(!confirm('¿Archivar esta captación?')) return;
+    var c = captaciones.find(function(x){return x.id===id;});
+    if(c) c.estado='perdida';
+    if(activeCap===id) activeCap=null;
+  }
+  renderCaptaciones();
+  renderCapDetail();
+}
+
+function openCap(id){
+  activeCap = activeCap===id ? null : id;
+  renderCaptaciones();
+  renderCapDetail();
+}
+
+function saveNewCaptacion(){
+  var nombre = document.getElementById('cap-nombre').value.trim();
+  if(!nombre){ document.getElementById('cap-err').textContent='El nombre es obligatorio'; return; }
+  var me = getMyAsesor();
+  var asesorId   = me ? me.id   : (asesores[0]?asesores[0].id:'');
+  var asesorName = me ? me.name : (asesores[0]?asesores[0].name:'');
+  // Admin can pick asesor
+  var selAsesor = document.getElementById('cap-asesor');
+  if(isAdmin() && selAsesor && selAsesor.value){
+    var found = asesores.find(function(a){return a.id===selAsesor.value;});
+    if(found){ asesorId=found.id; asesorName=found.name; }
+  }
+  var nid = nextCapId++;
+  captaciones.unshift(mkCaptacion(nid, {
+    nombre:   nombre,
+    telefono: document.getElementById('cap-tel').value.trim(),
+    mail:     document.getElementById('cap-mail').value.trim(),
+    comentarios: document.getElementById('cap-comentarios').value.trim(),
+    asesorId: asesorId,
+    asesorName: asesorName,
+  }));
+  activeCap = nid;
+  closeCapModal();
+  renderCaptaciones();
+  renderCapDetail();
+}
+
+function openCapModal(){
+  var el = document.getElementById('cap-modal-area'); if(!el) return;
+  var asesorSel = isAdmin() ?
+    '<div class="form-group"><label>Asesor</label><select id="cap-asesor">'+
+      asesores.map(function(a){return '<option value="'+a.id+'">'+a.name+'</option>';}).join('')+
+    '</select></div>' : '';
+  el.innerHTML =
+    '<div class="modal-overlay"><div class="modal">'+
+      '<div class="modal-title">Nueva captación</div>'+
+      '<div class="form-grid">'+
+        '<div class="form-group" style="grid-column:1/-1;"><label>Nombre completo *</label>'+
+          '<input id="cap-nombre" type="text" placeholder="ej: Carlos García"/><span class="err" id="cap-err"></span></div>'+
+        '<div class="form-group"><label>Teléfono</label><input id="cap-tel" type="text" placeholder="ej: 221 123 4567"/></div>'+
+        '<div class="form-group"><label>Email</label><input id="cap-mail" type="email" placeholder="ej: carlos@mail.com"/></div>'+
+        asesorSel+
+      '</div>'+
+      '<div class="form-group" style="margin-top:8px;"><label>Comentarios / plan de captación</label>'+
+        '<textarea id="cap-comentarios" rows="4" placeholder="¿Qué hay que hacer para captar esta propiedad? Anotá todo acá..." '+
+        'style="width:100%;font-size:13px;padding:8px;border:1px solid #ddd;border-radius:8px;font-family:inherit;resize:vertical;outline:none;margin-top:4px;"></textarea>'+
+      '</div>'+
+      '<div class="modal-actions">'+
+        '<button class="btn" onclick="closeCapModal()">Cancelar</button>'+
+        '<button class="btn btn-primary" onclick="saveNewCaptacion()">Guardar</button>'+
+      '</div>'+
+    '</div></div>';
+}
+
+function closeCapModal(){
+  var el = document.getElementById('cap-modal-area');
+  if(el) el.innerHTML='';
+}
+
+function saveCaptacionField(id, fieldCode, val){
+  var c = captaciones.find(function(x){return x.id===id;}); if(!c) return;
+  var fields = {1:'telefono', 2:'mail', 3:'comentarios'};
+  var field = fields[fieldCode];
+  if(field) c[field] = val;
+  scheduleSave();
+}
+
+function renderCaptaciones(){
+  var el = document.getElementById('captaciones-content'); if(!el) return;
+
+  // Filter by asesor for non-admins
+  var visible = isAdmin() ? captaciones : captaciones.filter(function(c){
+    var me = getMyAsesor();
+    return me && c.asesorId===me.id;
+  });
+
+  var activas  = visible.filter(function(c){return c.estado==='activa';});
+  var cerradas = visible.filter(function(c){return c.estado!=='activa';});
+
+  var h = '<div id="cap-modal-area"></div>';
+
+  // Toolbar
+  h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">'+
+    '<div style="font-size:13px;font-weight:700;color:#1a1a1a;">'+activas.length+' captación'+(activas.length!==1?'es':'')+' activa'+(activas.length!==1?'s':'')+
+    (cerradas.length?' <span style="color:#aaa;font-weight:400;font-size:12px;">· '+cerradas.length+' cerrada'+(cerradas.length!==1?'s':'')+'</span>':'')+
+    '</div>'+
+    '<button class="btn btn-primary" onclick="openCapModal()">+ Nueva captación</button>'+
+  '</div>';
+
+  // Admin search bar
+  var searchCap = document.getElementById('cap-search-inp') ? document.getElementById('cap-search-inp').value.toLowerCase() : '';
+
+  if(!activas.length && !cerradas.length){
+    h += '<div class="no-sel">No hay captaciones. Agregá una con el botón de arriba.</div>';
+    h += '<div id="cap-detail"></div>';
+    el.innerHTML = h;
+    return;
+  }
+
+  // Admin archive search
+  if(isAdmin()){
+    h += '<div style="margin-bottom:14px;display:flex;gap:8px;align-items:center;">'+
+      '<input id="cap-search-inp" type="text" placeholder="Buscar en archivo por nombre, teléfono o email..." value="'+searchCap+'" '+
+      'oninput="renderCaptaciones()" '+
+      'style="flex:1;height:34px;padding:0 12px;font-size:13px;border:1px solid #ddd;border-radius:8px;background:#fff;color:#1a1a1a;outline:none;font-family:inherit;"/>'+
+    '</div>';
+  }
+
+  // Grid
+  function capCard(c){
+    var dias = diasRestantesCap(c);
+    var vencida = dias <= 0;
+    var urgente = dias > 0 && dias <= 3;
+    var ok = dias > 3;
+    var borderColor = c.estado!=='activa' ? '#ddd' : vencida ? '#E24B4A' : urgente ? '#E24B4A' : '#eee';
+    var bgColor = c.estado!=='activa' ? '#fafaf8' : vencida ? '#FFF5F5' : urgente ? '#FFF5F5' : '#fff';
+    var a = asesores.find(function(x){return x.id===c.asesorId;}) || {name:c.asesorName||'—',color:'#888'};
+
+    var timerLabel = c.estado!=='activa' ?
+      '<span style="font-size:10px;padding:2px 8px;border-radius:10px;background:'+(c.estado==='captada'?'#E1F5EE':'#f0ede8')+';color:'+(c.estado==='captada'?'#085041':'#888')+';font-weight:600;">'+(c.estado==='captada'?'✅ Captada':'❌ Perdida')+'</span>' :
+      '<span style="font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700;background:'+(vencida?'#FCEBEB':urgente?'#FCEBEB':'#E1F5EE')+';color:'+(vencida?'#A32D2D':urgente?'#A32D2D':'#085041')+';">'+
+        (vencida?'Vencida':'⏱ '+dias+'d restante'+(dias!==1?'s':''))+
+      '</span>';
+
+    return '<div class="pcard'+(activeCap===c.id?' active':'')+'" onclick="openCap('+c.id+')" '+
+      'style="border-color:'+borderColor+';background:'+bgColor+';">'+
+      '<div class="pcard-top">'+
+        '<span class="asesor-badge" style="background:'+a.color+'22;color:'+a.color+';">'+a.name+'</span>'+
+        timerLabel+
+      '</div>'+
+      '<div class="pcard-addr" style="font-size:14px;">'+c.nombre+'</div>'+
+      (c.telefono?'<div class="pcard-owner">📞 '+c.telefono+'</div>':'')+
+      (c.mail?'<div class="pcard-owner" style="color:#888;">✉ '+c.mail+'</div>':'')+
+      (c.comentarios?'<div style="font-size:11px;color:#888;margin-top:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+c.comentarios.substring(0,60)+'...</div>':'')+
+    '</div>';
+  }
+
+  h += '<div style="display:flex;gap:16px;flex-wrap:wrap;">';
+  // Left: cards
+  h += '<div style="flex:1;min-width:260px;">';
+  if(activas.length) h += '<div class="grid">'+activas.map(capCard).join('')+'</div>';
+  // Archivo (cerradas) — with search filter for admin
+  if(cerradas.length || searchCap){
+    var archivoVisible = isAdmin() && searchCap
+      ? captaciones.filter(function(c){
+          var q = searchCap;
+          return c.estado!=='activa' && (
+            c.nombre.toLowerCase().includes(q) ||
+            (c.telefono||'').toLowerCase().includes(q) ||
+            (c.mail||'').toLowerCase().includes(q) ||
+            (c.comentarios||'').toLowerCase().includes(q)
+          );
+        })
+      : cerradas;
+
+    if(archivoVisible.length){
+      h += '<div style="margin-top:16px;padding-top:14px;border-top:1px solid #eee;">'+
+        '<div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;">'+
+          (searchCap ? 'Resultados de búsqueda ('+archivoVisible.length+')' : '📁 Archivo ('+archivoVisible.length+')')+
+        '</div>';
+
+      // Show as compact list for archive
+      archivoVisible.forEach(function(c){
+        var a = asesores.find(function(x){return x.id===c.asesorId;}) || {name:c.asesorName||'—',color:'#888'};
+        var estadoBadge = c.estado==='captada'
+          ? '<span style="font-size:10px;padding:2px 8px;border-radius:10px;background:#E1F5EE;color:#085041;font-weight:700;">✅ Captada</span>'
+          : '<span style="font-size:10px;padding:2px 8px;border-radius:10px;background:#f0ede8;color:#888;font-weight:600;">❌ Perdida</span>';
+        var createdDate = new Date(c.createdAt).toLocaleDateString('es-AR',{day:'numeric',month:'short',year:'numeric'});
+        h += '<div class="pcard'+(activeCap===c.id?' active':'')+'" onclick="openCap('+c.id+')" '+
+          'style="opacity:.75;display:flex;align-items:center;gap:10px;padding:10px 14px;">'+
+          '<div style="flex:1;">'+
+            '<div style="font-size:13px;font-weight:600;color:#1a1a1a;">'+c.nombre+'</div>'+
+            '<div style="font-size:11px;color:#888;">'+
+              (c.telefono?'📞 '+c.telefono+' · ':'')+
+              (c.mail?'✉ '+c.mail+' · ':'')+
+              a.name+' · '+createdDate+
+            '</div>'+
+          '</div>'+
+          estadoBadge+
+        '</div>';
+      });
+      h += '</div>';
+    }
+  }
+  h += '</div>';
+
+  // Right: detail
+  h += '<div id="cap-detail" style="flex:1.5;min-width:300px;"></div>';
+  // Admin export button
+  if(isAdmin() && captaciones.length){
+    h += '<div style="margin-top:24px;text-align:center;">'+
+      '<button onclick="exportarBasePropietarios()" '+
+      'style="height:34px;padding:0 18px;font-size:12px;font-weight:600;border:1px solid #185FA5;border-radius:8px;background:#E6F1FB;color:#0C447C;cursor:pointer;font-family:inherit;">'+
+      '📋 Exportar base de propietarios</button>'+
+    '</div>';
+  }
+
+  h += '</div>';
+
+  el.innerHTML = h;
+  renderCapDetail();
+}
+
+function exportarBackupExcel(){
+  if(typeof XLSX === 'undefined'){ alert('Error: librería XLSX no cargada. Recargá la página.'); return; }
+
+  var wb = XLSX.utils.book_new();
+  var fecha = new Date().toLocaleDateString('es-AR').replace(/\//g,'-');
+
+  // ── Hoja 1: Propiedades ────────────────────────────────────────────────────
+  var propsData = [['Dirección','Tipo','Asesor','Tokko Producer','Propietario','Teléfono','Precio actual','Precio ingreso','Publicación','Web','Apto banco','Cartel','Fecha ingreso','Último contacto','Etapa','% Avance','Exclusiva','Estado precio','Finalizada','Fecha cierre','Observaciones']];
+  props.forEach(function(p){
+    var a = getA(p.asesorId);
+    var s = stg(p);
+    var autoTask = p.tasks&&p.tasks.pre ? p.tasks.pre.find(function(x){return x.id==='pre_2';}) : null;
+    var precioTask = p.tasks&&p.tasks.seg ? p.tasks.seg.find(function(x){return x.id==='seg_3';}) : null;
+    propsData.push([
+      p.addr, p.tipo, a.name, p.tokkoProducerName||'',
+      p.propietario, p.telefono, p.precio, p.precioIngreso||'',
+      p.publicacion, p.web||'', p.aptoBanco?'Sí':'No', p.cartel?'Sí':'No',
+      p.ingreso||'', p.lastContacto||'',
+      s ? s.label : '', calcPct(p)+'%',
+      autoTask&&autoTask.autoVal==='exclusiva'?'Exclusiva':'No exclusiva',
+      precioTask&&precioTask.precioVal ? precioTask.precioVal : 'Sin evaluar',
+      p.finalizada?'Sí':'No', p.fechaFin||'',
+      p.observaciones||''
+    ]);
+  });
+  var wsProps = XLSX.utils.aoa_to_sheet(propsData);
+  wsProps['!cols'] = [28,10,14,16,16,14,14,14,12,6,10,7,14,14,16,8,12,14,10,12,30].map(function(w){return {wch:w};});
+  XLSX.utils.book_append_sheet(wb, wsProps, 'Propiedades');
+
+  // ── Hoja 2: Compradores ────────────────────────────────────────────────────
+  var compData = [['Nombre','Teléfono','Asesor','Propiedad reservada','Tipo','Precio','Inmobiliaria','Fecha reserva','Último contacto','% Avance','Finalizada','Fecha cierre','Observaciones']];
+  compradores.forEach(function(c){
+    var a = getA(c.asesorId);
+    compData.push([
+      c.nombre, c.telefono||'', a.name,
+      c.propAddr||'', c.propTipo||'', c.propPrecio||'', c.inmo||'',
+      c.fechaReserva||'', c.lastContacto||'',
+      calcPctComp(c)+'%',
+      c.finalizada?'Sí':'No', c.fechaFin||'',
+      c.observaciones||''
+    ]);
+  });
+  var wsComp = XLSX.utils.aoa_to_sheet(compData);
+  wsComp['!cols'] = [18,14,14,24,10,14,16,14,14,8,10,12,30].map(function(w){return {wch:w};});
+  XLSX.utils.book_append_sheet(wb, wsComp, 'Compradores');
+
+  // ── Hoja 3: Captaciones ────────────────────────────────────────────────────
+  var capData = [['Nombre','Teléfono','Email','Asesor','Estado','Fecha creación','Días restantes','Plan de captación']];
+  captaciones.forEach(function(c){
+    var a = asesores.find(function(x){return x.id===c.asesorId;})||{name:c.asesorName||'—'};
+    var dias = diasRestantesCap(c);
+    var createdDate = new Date(c.createdAt).toLocaleDateString('es-AR');
+    capData.push([
+      c.nombre, c.telefono||'', c.mail||'', a.name,
+      c.estado==='captada'?'Captada':c.estado==='perdida'?'Perdida':'Activa',
+      createdDate,
+      c.estado==='activa' ? dias : '—',
+      c.comentarios||''
+    ]);
+  });
+  var wsCap = XLSX.utils.aoa_to_sheet(capData);
+  wsCap['!cols'] = [20,14,24,14,10,14,12,40].map(function(w){return {wch:w};});
+  XLSX.utils.book_append_sheet(wb, wsCap, 'Captaciones');
+
+  // ── Hoja 4: Asesores ──────────────────────────────────────────────────────
+  var asesData = [['Nombre','Email','Propiedades activas','Propiedades cerradas']];
+  asesores.forEach(function(a){
+    var act = props.filter(function(p){ return !p.finalizada && ((p.tokkoProducerName||'').trim().toLowerCase()===a.name.trim().toLowerCase()||p.asesorId===a.id); }).length;
+    var fin = props.filter(function(p){ return p.finalizada && ((p.tokkoProducerName||'').trim().toLowerCase()===a.name.trim().toLowerCase()||p.asesorId===a.id); }).length;
+    asesData.push([a.name, a.email||'', act, fin]);
+  });
+  var wsAses = XLSX.utils.aoa_to_sheet(asesData);
+  wsAses['!cols'] = [{wch:20},{wch:30},{wch:18},{wch:18}];
+  XLSX.utils.book_append_sheet(wb, wsAses, 'Asesores');
+
+  // ── Descargar ──────────────────────────────────────────────────────────────
+  XLSX.writeFile(wb, 'Sessa_Backup_'+fecha+'.xlsx');
+}
+
+function closeExportModal(btn){
+  var el = btn.closest('.resumen-overlay');
+  if(el) el.remove();
+}
+
+function copyBasePropietarios(btn){
+  var ta = btn.closest('.resumen-modal').querySelector('textarea');
+  if(!ta) return;
+  navigator.clipboard.writeText(ta.value).then(function(){
+    btn.textContent='Copiado!';
+    setTimeout(function(){ btn.textContent='Copiar'; }, 2000);
+  });
+}
+
+function exportarBasePropietarios(){
+  var lines = ['BASE DE PROPIETARIOS - SESSA PROPIEDADES'];
+  lines.push(new Date().toLocaleDateString('es-AR',{day:'numeric',month:'long',year:'numeric'}));
+  lines.push('------------------------');
+  lines.push('');
+
+  // Group by estado
+  var captadas = captaciones.filter(function(c){return c.estado==='captada';});
+  var activas  = captaciones.filter(function(c){return c.estado==='activa';});
+  var perdidas = captaciones.filter(function(c){return c.estado==='perdida';});
+
+  function formatCap(c){
+    var a = asesores.find(function(x){return x.id===c.asesorId;})||{name:c.asesorName||'—'};
+    var d = new Date(c.createdAt).toLocaleDateString('es-AR',{day:'numeric',month:'short',year:'numeric'});
+    var line = c.nombre;
+    if(c.telefono) line += ' | Tel: '+c.telefono;
+    if(c.mail)     line += ' | Mail: '+c.mail;
+    line += ' | Asesor: '+a.name+' | '+d;
+    if(c.comentarios) line += ' | Nota: '+c.comentarios;
+    return line;
+  }
+
+  if(captadas.length){
+    lines.push('CAPTADAS ('+captadas.length+')');
+    captadas.forEach(function(c){ lines.push('• '+formatCap(c)); });
+    lines.push('');
+  }
+  if(activas.length){
+    lines.push('EN PROCESO ('+activas.length+')');
+    activas.forEach(function(c){ lines.push('• '+formatCap(c)); });
+    lines.push('');
+  }
+  if(perdidas.length){
+    lines.push('PERDIDAS ('+perdidas.length+')');
+    perdidas.forEach(function(c){ lines.push('• '+formatCap(c)); });
+  }
+
+  lines.push('');
+  lines.push('------------------------');
+  lines.push('Generado desde Sessa Propiedades Tracker');
+
+  var txt = lines.join('\n');
+
+
+  var overlay = document.createElement('div');
+  overlay.className = 'resumen-overlay';
+  overlay.onclick = function(e){ if(e.target===overlay) overlay.remove(); };
+  overlay.innerHTML =
+    '<div class="resumen-modal" style="max-width:560px;">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">'+
+        '<h3 style="font-size:15px;font-weight:700;color:#1a1a1a;">📋 Base de propietarios</h3>'+
+        '<button onclick="closeExportModal(this)" style="background:none;border:none;font-size:20px;cursor:pointer;color:#888;">×</button>'+
+      '</div>'+
+      '<textarea class="resumen-textarea" rows="16" style="font-family:monospace;font-size:11px;line-height:1.6;background:#fafaf8;">'+txt+'</textarea>'+
+      '<div class="resumen-actions" style="margin-top:10px;">'+
+        '<button onclick="closeExportModal(this)" style="background:none;border:none;font-size:20px;cursor:pointer;color:#888;">×</button>'+
+      '<button onclick="copyBasePropietarios(this)" style="height:34px;padding:0 16px;font-size:12px;font-weight:700;border:1px solid #185FA5;border-radius:8px;background:#E6F1FB;color:#0C447C;cursor:pointer;font-family:inherit;">Copiar</button>'+
+      '</div>'+
+    '</div>';
+  document.body.appendChild(overlay);
+}
+
+function renderCapDetail(){
+  var el = document.getElementById('cap-detail'); if(!el) return;
+  if(!activeCap){ el.innerHTML='<div class="no-sel">Seleccioná una captación para ver el detalle.</div>'; return; }
+  var c = captaciones.find(function(x){return x.id===activeCap;});
+  if(!c){ el.innerHTML=''; return; }
+
+  var dias = diasRestantesCap(c);
+  var vencida = dias<=0;
+  var urgente = dias>0 && dias<=3;
+  var a = asesores.find(function(x){return x.id===c.asesorId;}) || {name:c.asesorName||'—',color:'#888'};
+
+  var timerColor = c.estado!=='activa'?'#888':vencida?'#A32D2D':urgente?'#A32D2D':'#085041';
+  var timerBg    = c.estado!=='activa'?'#f0ede8':vencida?'#FCEBEB':urgente?'#FCEBEB':'#E1F5EE';
+  var timerText  = c.estado!=='activa'?(c.estado==='captada'?'Captada':'Perdida'):(vencida?'Vencida - renovar':'⏱ '+dias+' día'+(dias!==1?'s':'')+' restante'+(dias!==1?'s':''));
+
+  var h = '<div class="detail" style="position:sticky;top:16px;">';
+
+  // Header
+  h += '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">'+
+    '<div>'+
+      '<div style="font-size:18px;font-weight:700;color:#1a1a1a;">'+c.nombre+'</div>'+
+      '<div style="margin-top:4px;display:flex;align-items:center;gap:8px;">'+
+        '<span class="asesor-badge" style="background:'+a.color+'22;color:'+a.color+';">'+a.name+'</span>'+
+        '<span style="font-size:12px;font-weight:700;padding:3px 10px;border-radius:20px;background:'+timerBg+';color:'+timerColor+';">'+timerText+'</span>'+
+      '</div>'+
+    '</div>'+
+    '<div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;">'+
+      (c.estado==='activa'?
+        '<button onclick="renovarCap('+c.id+')" style="height:26px;padding:0 10px;font-size:11px;font-weight:600;border:1px solid #185FA5;border-radius:8px;background:#E6F1FB;color:#0C447C;cursor:pointer;font-family:inherit;white-space:nowrap;">↺ Renovar semana</button>'+
+        '<div style="display:flex;gap:4px;">'+
+          '<button onclick="cerrarCap('+c.id+',2)" style="height:26px;padding:0 8px;font-size:11px;font-weight:600;border:1px solid #0F6E56;border-radius:8px;background:#E1F5EE;color:#085041;cursor:pointer;font-family:inherit;">✅ Captada</button>'+
+          '<button onclick="cerrarCap('+c.id+',3)" style="height:26px;padding:0 8px;font-size:11px;font-weight:600;border:1px solid #ddd;border-radius:8px;background:#fff;color:#888;cursor:pointer;font-family:inherit;">❌ Perdida</button>'+
+        '</div>'
+        :'<button onclick="cerrarCap('+c.id+',1)" style="height:26px;padding:0 10px;font-size:11px;font-weight:600;border:1px solid #ddd;border-radius:8px;background:#fff;color:#666;cursor:pointer;font-family:inherit;white-space:nowrap;">↩ Reactivar</button>')+
+      '<button onclick="eliminarCap('+c.id+')" style="height:26px;padding:0 10px;font-size:11px;border:1px solid #fcc;border-radius:8px;background:#fff;color:#E24B4A;cursor:pointer;font-family:inherit;white-space:nowrap;">Eliminar</button>'+
+    '</div>'+
+  '</div>';
+
+  // Datos de contacto
+  h += '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;padding:12px 14px;background:#fafaf8;border:1px solid #eee;border-radius:10px;">'+
+    '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'+
+      '<span style="font-size:11px;color:#888;width:60px;">Teléfono</span>'+
+      '<input type="text" value="'+c.telefono+'" placeholder="Sin teléfono" '+
+      'style="flex:1;font-size:12px;padding:3px 8px;height:26px;border:1px solid #ddd;border-radius:6px;background:#fff;color:#1a1a1a;outline:none;font-family:inherit;" '+
+      'onchange="saveCaptacionField('+c.id+',1,this.value)" onclick="event.stopPropagation()"/>'+
+    '</div>'+
+    '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'+
+      '<span style="font-size:11px;color:#888;width:60px;">Email</span>'+
+      '<input type="text" value="'+c.mail+'" placeholder="Sin email" '+
+      'style="flex:1;font-size:12px;padding:3px 8px;height:26px;border:1px solid #ddd;border-radius:6px;background:#fff;color:#1a1a1a;outline:none;font-family:inherit;" '+
+      'onchange="saveCaptacionField('+c.id+',2,this.value)" onclick="event.stopPropagation()"/>'+
+    '</div>'+
+  '</div>';
+
+  // Comentarios
+  h += '<div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Plan de captación / comentarios</div>'+
+    '<textarea rows="6" style="width:100%;font-size:13px;padding:10px;border:1px solid #ddd;border-radius:10px;font-family:inherit;resize:vertical;outline:none;background:#fff;line-height:1.5;" '+
+    'placeholder="Anotá qué hay que hacer para captar esta propiedad..." '+
+    'onchange="saveCaptacionField('+c.id+',3,this.value)" onclick="event.stopPropagation()">'+c.comentarios+'</textarea>';
+
+  // Created at
+  var createdDate = new Date(c.createdAt).toLocaleDateString('es-AR',{day:'numeric',month:'long',year:'numeric'});
+  h += '<div style="font-size:11px;color:#ccc;margin-top:8px;text-align:right;">Creada el '+createdDate+'</div>';
+
+  h += '</div>';
+  el.innerHTML = h;
+}
+
 function renderAsesores(){
   const el = document.getElementById('asesor-list-el'); if(!el) return;
   if(!asesores.length){ el.innerHTML='<div class="no-sel">No hay asesores.</div>'; return; }
@@ -2593,9 +3579,11 @@ function saveToFirestore(){
     props: JSON.parse(JSON.stringify(props)),
     compradores: JSON.parse(JSON.stringify(compradores)),
     asesores: JSON.parse(JSON.stringify(asesores)),
+    captaciones: JSON.parse(JSON.stringify(captaciones)),
     nextId: nextId,
     nextCid: nextCid,
-    nextAid: nextAid
+    nextAid: nextAid,
+    nextCapId: nextCapId
   });
   // Private data: Mi día per user
   fb.setDoc(fb.doc(fb.db,'tareas',currentUser.uid), {
@@ -2616,9 +3604,10 @@ function startSync(){
   var unsubShared = fb.onSnapshot(fb.doc(fb.db,'sessa','shared'), function(snap){
     if(!snap.exists()) return;
     var data = snap.data();
-    if(data.props !== undefined)       { props = data.props;       nextId  = data.nextId  || nextId;  }
-    if(data.compradores !== undefined) { compradores = data.compradores; nextCid = data.nextCid || nextCid; }
-    if(data.asesores !== undefined)    { asesores = data.asesores; nextAid = data.nextAid || nextAid; }
+    if(data.props !== undefined)        { props = data.props;             nextId   = data.nextId   || nextId;   }
+    if(data.compradores !== undefined)  { compradores = data.compradores; nextCid  = data.nextCid  || nextCid;  }
+    if(data.asesores !== undefined)     { asesores = data.asesores;       nextAid  = data.nextAid  || nextAid;  }
+    if(data.captaciones !== undefined)  { captaciones = data.captaciones; nextCapId = data.nextCapId || nextCapId; }
     renderGrid();
     renderCompradores();
     updAsesorSel();
@@ -2651,6 +3640,12 @@ renderCompradores = function(){
 var _origRenderTareas = renderTareas;
 renderTareas = function(){
   _origRenderTareas();
+  scheduleSave();
+};
+
+var _origRenderCaptaciones = renderCaptaciones;
+renderCaptaciones = function(){
+  _origRenderCaptaciones();
   scheduleSave();
 };
 
