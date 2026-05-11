@@ -4209,6 +4209,8 @@ initAuthListener();
 function saveToFirestore(){
   if(!currentUser) return;
   var fb = window._fb;
+  var now = Date.now();
+  _lastSavedAt = now;
   fb.setDoc(fb.doc(fb.db,'sessa','shared'), {
     props: JSON.parse(JSON.stringify(props)),
     compradores: JSON.parse(JSON.stringify(compradores)),
@@ -4220,7 +4222,8 @@ function saveToFirestore(){
     nextId: nextId,
     nextCid: nextCid,
     nextAid: nextAid,
-    nextCapId: nextCapId
+    nextCapId: nextCapId,
+    savedAt: now
   });
   // Private data: Mi día per user
   fb.setDoc(fb.doc(fb.db,'tareas',currentUser.uid), {
@@ -4230,7 +4233,11 @@ function saveToFirestore(){
 
 function scheduleSave(){
   if(syncTimeout) clearTimeout(syncTimeout);
-  syncTimeout = setTimeout(saveToFirestore, 1200);
+  // Save immediately — debounce was causing data loss
+  syncTimeout = setTimeout(function(){
+    syncTimeout = null;
+    saveToFirestore();
+  }, 300);
 }
 
 // ── Load from Firestore & listen ──────────────────────────────────────────────
@@ -4238,28 +4245,57 @@ function startSync(){
   var fb = window._fb;
 
   // 1. Listen to shared data (real-time)
-  var _initialLoad = true; // first snapshot is always authoritative
+  var _initialLoad = true;
+  var _lastSavedAt = 0; // timestamp of our last save
 
   var unsubShared = fb.onSnapshot(fb.doc(fb.db,'sessa','shared'), function(snap){
     if(!snap.exists()) return;
+    var data = snap.data();
 
-    // If we have a pending local save, DON'T overwrite local data
-    // Exception: initial load always applies remote data
-    if(syncTimeout && !_initialLoad){
-      console.log('[Sessa] Remote update skipped — local save pending');
+    // On initial load: always apply remote data
+    if(_initialLoad){
+      _initialLoad = false;
+      _remoteUpdate = true;
+      if(data.props !== undefined)       { props = data.props;             nextId    = data.nextId    || nextId;   }
+      if(data.compradores !== undefined) { compradores = data.compradores; nextCid   = data.nextCid   || nextCid;  }
+      if(data.asesores !== undefined)    { asesores = data.asesores;       nextAid   = data.nextAid   || nextAid;  }
+      if(data.captaciones !== undefined) { captaciones = data.captaciones; nextCapId = data.nextCapId || nextCapId; }
+      if(data.reservasLog !== undefined) { reservasLog = data.reservasLog; }
+      if(data.visitasDB !== undefined)   { visitasDB = data.visitasDB; }
+      if(data.metaMensual !== undefined) { metaMensual = data.metaMensual; }
+      _remoteUpdate = false;
+      _renderGridOnly();
+      _renderCompradoresOnly();
+      updAsesorSel();
+      if(typeof renderAsesores === 'function') renderAsesores();
       return;
     }
 
-    _initialLoad = false;
-    var data = snap.data();
+    // After initial load: only apply if remote has more or equal props
+    // AND we are not in the middle of saving
+    var remoteProps = data.props || [];
+    var remoteTime  = data.savedAt || 0;
+
+    // Skip if our local data is newer (we just saved)
+    if(remoteTime <= _lastSavedAt){
+      console.log('[Sessa] Snapshot skipped — local is newer');
+      return;
+    }
+
+    // Only apply if remote has at least as many props as local
+    if(remoteProps.length < props.length){
+      console.log('[Sessa] Snapshot skipped — remote has fewer props ('+remoteProps.length+' vs '+props.length+')');
+      return;
+    }
+
     _remoteUpdate = true;
-    if(data.props !== undefined)        { props = data.props;             nextId    = data.nextId    || nextId;   }
-    if(data.compradores !== undefined)  { compradores = data.compradores; nextCid   = data.nextCid   || nextCid;  }
-    if(data.asesores !== undefined)     { asesores = data.asesores;       nextAid   = data.nextAid   || nextAid;  }
-    if(data.captaciones !== undefined)  { captaciones = data.captaciones; nextCapId = data.nextCapId || nextCapId; }
-    if(data.reservasLog !== undefined)  { reservasLog = data.reservasLog; }
-    if(data.visitasDB !== undefined)    { visitasDB = data.visitasDB; }
-    if(data.metaMensual !== undefined)  { metaMensual = data.metaMensual; }
+    if(data.props !== undefined)       { props = data.props;             nextId    = data.nextId    || nextId;   }
+    if(data.compradores !== undefined) { compradores = data.compradores; nextCid   = data.nextCid   || nextCid;  }
+    if(data.asesores !== undefined)    { asesores = data.asesores;       nextAid   = data.nextAid   || nextAid;  }
+    if(data.captaciones !== undefined) { captaciones = data.captaciones; nextCapId = data.nextCapId || nextCapId; }
+    if(data.reservasLog !== undefined) { reservasLog = data.reservasLog; }
+    if(data.visitasDB !== undefined)   { visitasDB = data.visitasDB; }
+    if(data.metaMensual !== undefined) { metaMensual = data.metaMensual; }
     _remoteUpdate = false;
 
     _renderGridOnly();
