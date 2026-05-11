@@ -3946,6 +3946,8 @@ async function importarDesdeTokko(){
     if(producersAdded > 0){
       renderAsesores();
       updAsesorSel();
+      if(syncTimeout) clearTimeout(syncTimeout);
+      saveToFirestore();
       // Switch to Asesores tab so admin can set emails immediately
       var asesorBtn = document.getElementById('tab-btn-asesores');
       if(asesorBtn) asesorBtn.click();
@@ -4132,6 +4134,9 @@ function confirmarImportTokko(){
   document.getElementById('tokko-overlay').remove();
   renderGrid();
   renderDetail();
+  // Save immediately after import — don't debounce
+  if(syncTimeout) clearTimeout(syncTimeout);
+  saveToFirestore();
   alert('✅ '+checks.length+' propiedad'+(checks.length>1?'es importadas':' importada')+' correctamente.');
 }
 
@@ -4233,25 +4238,34 @@ function startSync(){
   var fb = window._fb;
 
   // 1. Listen to shared data (real-time)
+  var _initialLoad = true; // first snapshot is always authoritative
+
   var unsubShared = fb.onSnapshot(fb.doc(fb.db,'sessa','shared'), function(snap){
     if(!snap.exists()) return;
+
+    // If we have a pending local save, DON'T overwrite local data
+    // Exception: initial load always applies remote data
+    if(syncTimeout && !_initialLoad){
+      console.log('[Sessa] Remote update skipped — local save pending');
+      return;
+    }
+
+    _initialLoad = false;
     var data = snap.data();
-    // Pause saving while we apply remote data to avoid overwrite loop
     _remoteUpdate = true;
-    if(data.props !== undefined)        { props = data.props;             nextId   = data.nextId   || nextId;   }
-    if(data.compradores !== undefined)  { compradores = data.compradores; nextCid  = data.nextCid  || nextCid;  }
-    if(data.asesores !== undefined)     { asesores = data.asesores;       nextAid  = data.nextAid  || nextAid;  }
+    if(data.props !== undefined)        { props = data.props;             nextId    = data.nextId    || nextId;   }
+    if(data.compradores !== undefined)  { compradores = data.compradores; nextCid   = data.nextCid   || nextCid;  }
+    if(data.asesores !== undefined)     { asesores = data.asesores;       nextAid   = data.nextAid   || nextAid;  }
     if(data.captaciones !== undefined)  { captaciones = data.captaciones; nextCapId = data.nextCapId || nextCapId; }
     if(data.reservasLog !== undefined)  { reservasLog = data.reservasLog; }
     if(data.visitasDB !== undefined)    { visitasDB = data.visitasDB; }
     if(data.metaMensual !== undefined)  { metaMensual = data.metaMensual; }
     _remoteUpdate = false;
-    // Re-render without triggering save
+
     _renderGridOnly();
     _renderCompradoresOnly();
     updAsesorSel();
     if(typeof renderAsesores === 'function') renderAsesores();
-    // Refresh active detail panel if open
     if(activeProp) renderDetail();
     if(activeComprador) renderCompradorDetail();
   });
