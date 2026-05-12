@@ -8,7 +8,7 @@ lang="es">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
   from "https://www.gstatic.com/firebasejs/11.7.1/firebase-auth.js";
-import { getFirestore, doc, collection, setDoc, updateDoc, getDoc, onSnapshot, deleteDoc, query }
+import { getFirestore, doc, collection, setDoc, updateDoc, getDoc, getDocs, onSnapshot, deleteDoc, query, writeBatch }
   from "https://www.gstatic.com/firebasejs/11.7.1/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -25,7 +25,7 @@ const auth   = getAuth(fbApp);
 const db     = getFirestore(fbApp);
 
 // Expose to window so inline script can use them
-window._fb = { auth, db, doc, collection, setDoc, updateDoc, getDoc, onSnapshot, deleteDoc, query,
+window._fb = { auth, db, doc, collection, setDoc, updateDoc, getDoc, getDocs, onSnapshot, deleteDoc, query, writeBatch,
                signInWithEmailAndPassword, signOut, onAuthStateChanged };
 </script>
 <style>
@@ -439,7 +439,7 @@ function saveVencAuth(pid, val){
   var p = props.find(function(x){return x.id===pid;}); if(!p) return;
   p.fechaVencAuth = val;
   if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}
-  saveToFirestore();
+  saveSharedMeta();
   renderDetail();
   renderGrid();
 }
@@ -542,6 +542,8 @@ function guardarVisita(pid){
   });
 
   document.getElementById('visita-overlay').remove();
+  saveProp(p);
+  saveMeta();
   renderDetail();
   renderGrid();
   renderVisitasDB();
@@ -550,8 +552,7 @@ function guardarVisita(pid){
 function savePubField(pid, val){
   var p = props.find(function(x){return x.id===pid;}); if(!p) return;
   p.publicacion = val;
-  if(syncTimeout){ clearTimeout(syncTimeout); syncTimeout = null; }
-  saveToFirestore();
+  saveProp(p);
   // Update card badge without full re-render
   var sel = document.getElementById('pub-sel-'+pid);
   if(sel) sel.value = val;
@@ -568,8 +569,7 @@ function updatePropField(pid, fieldCode, val){
 function togglePropBool(pid, field){
   var p = props.find(function(x){return x.id===pid;}); if(!p) return;
   p[field] = p[field]==='Si' ? 'No' : 'Si';
-  if(syncTimeout){ clearTimeout(syncTimeout); syncTimeout = null; }
-  saveToFirestore();
+  saveProp(p);
   renderDetail();
 }
 
@@ -583,6 +583,7 @@ function setContactoHoy(pid){
   p.lastContacto = fecha;
   var inp = document.getElementById('lc-inp-'+pid);
   if(inp) inp.value = fecha;
+  saveProp(p);
   renderGrid();
   renderDetail();
 }
@@ -708,6 +709,7 @@ function toggle(pid, eid, tid){
         mes: today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0'),
         estado: 'activa'
       });
+      saveMeta();
     }
   }
   const t = p.tasks[eid].find(x=>x.id===tid);
@@ -715,16 +717,15 @@ function toggle(pid, eid, tid){
   t.done = !t.done;
   if(t.special==='terminada' && t.done)  { p.finalizada=true;  p.fechaFin=toDay(); }
   if(t.special==='terminada' && !t.done) { p.finalizada=false; p.fechaFin=''; }
-  if(syncTimeout) clearTimeout(syncTimeout);
-  syncTimeout = null;
-  saveToFirestore();
+  saveProp(p);
+  saveSharedMeta();
   renderGrid(); renderDetail();
 }
 
 function setValor(pid, val){
   const p = props.find(x=>x.id===pid); if(!p) return;
   const t = p.tasks['cierre'].find(x=>x.id==='c_valor');
-  if(t){ t.valor = val; scheduleSave(); }
+  if(t){ t.valor = val; saveProp(p); }
 }
 function setDias(pid, val){
   const p = props.find(function(x){return x.id===pid;}); if(!p) return;
@@ -732,9 +733,8 @@ function setDias(pid, val){
   if(t){
     const wasEmpty = !t.dias || t.dias.trim()==='';
     t.dias = val;
-    // Set the start date only once when first entering a value
     if(wasEmpty && val && val.trim() && val!=='NO') t.boletoFecha = Date.now();
-    scheduleSave();
+    saveProp(p);
   }
 }
 
@@ -742,7 +742,7 @@ function toggleDoc(pid, key){
   var p = props.find(function(x){return x.id===pid;}); if(!p) return;
   if(!p.docs) p.docs = {boleto:false,escritura:false,planoObra:false,planoPH:false,reglamento:false};
   p.docs[key] = !p.docs[key];
-  scheduleSave();
+  saveProp(p);
   // Update the button visually without full re-render
   var btn = document.getElementById('doc-'+key+'-'+pid);
   if(btn){
@@ -781,7 +781,7 @@ function saveEscribano(pid, field, val){
       cb.style.borderColor = '';
     }
   }
-  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;} saveToFirestore();
+  saveProp(p);
 }
 
 function saveDriveLink(pid, val){
@@ -810,7 +810,7 @@ function saveDriveLink(pid, val){
       renderDetail();
     }
   }
-  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;} saveToFirestore();
+  saveProp(p);
 }
 
 function updateBoletoCheck(pid){
@@ -1411,7 +1411,10 @@ function saveProp(){
     observaciones:document.getElementById('f-obs').value.trim()
   };
   const nid = ++nextId;
-  props.push(mkProp(nid, d));
+  var newP = mkProp(nid, d);
+  props.push(newP);
+  saveProp(newP);
+  saveSharedMeta();
   activeProp = nid;
   closeModal('prop'); renderGrid(); renderDetail();
 }
@@ -1455,8 +1458,8 @@ function updateAsesorEmail(aid, val){
   var a = asesores.find(function(x){ return x.id===aid; });
   if(a){
     a.email = val.trim().toLowerCase();
+    saveAsesorDoc(a);
     renderAsesores();
-    scheduleSave();
   }
 }
 
@@ -1580,7 +1583,7 @@ function saveCompDrive(cid, val){
   }
   // Refresh to show/hide Open Drive button
   renderCompradorDetail();
-  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;} saveToFirestore();
+  saveComp(c);
 }
 
 function saveCompValor(cid, val){
@@ -1660,7 +1663,7 @@ function saveCompEscribano(cid, field, val){
       cb.innerHTML=''; cb.style.background=''; cb.style.borderColor='';
     }
   }
-  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;} saveToFirestore();
+  saveComp(c);
 }
 
 function setCompContactoHoy(cid){
@@ -1670,6 +1673,7 @@ function setCompContactoHoy(cid){
   c.lastContacto = fecha;
   var inp = document.getElementById('clc-inp-'+cid);
   if(inp) inp.value = fecha;
+  saveComp(c);
   renderCompradores(); renderCompradorDetail();
 }
 
@@ -2427,7 +2431,7 @@ function renderStats(){
       (isAdmin()?'<div style="display:flex;align-items:center;gap:8px;">'+
         '<span style="font-size:11px;color:#888;">Meta:</span>'+
         '<input type="number" id="meta-input" value="'+metaMensual+'" min="1" max="99" '+
-        'onchange="metaMensual=parseInt(this.value)||3;renderStats()" '+
+        'onchange="metaMensual=parseInt(this.value)||3;saveMeta();renderStats()" '+
         'style="width:50px;height:28px;padding:0 6px;font-size:13px;font-weight:700;border:1px solid #ddd;border-radius:6px;background:#fff;outline:none;font-family:inherit;text-align:center;"/>'+
         '<span style="font-size:11px;color:#888;">reservas</span>'+
       '</div>':'') +
@@ -2661,7 +2665,7 @@ function copyInforme(){
 
 function cambiarEstadoReserva(rid, estado){
   var r = reservasLog.find(function(x){return String(x.id)===String(rid);});
-  if(r){ r.estado = estado; scheduleSave(); renderStats(); }
+  if(r){ r.estado = estado; saveMeta(); renderStats(); }
 }
 
 function closeInformeModal(){
@@ -2834,7 +2838,7 @@ function renovarCap(id){
   c.createdAt = Date.now();
   if(syncTimeout) clearTimeout(syncTimeout);
   syncTimeout = null;
-  saveToFirestore();
+  saveSharedMeta();
   renderCaptaciones();
   renderCapDetail();
 }
@@ -2847,7 +2851,7 @@ function cerrarCap(id, estadoCode){
   activeCap = null;
   if(syncTimeout) clearTimeout(syncTimeout);
   syncTimeout = null;
-  saveToFirestore();
+  saveSharedMeta();
   renderCaptaciones();
   renderCapDetail();
 }
@@ -2866,7 +2870,7 @@ function eliminarCap(id){
   }
   if(syncTimeout) clearTimeout(syncTimeout);
   syncTimeout = null;
-  saveToFirestore();
+  saveSharedMeta();
   renderCaptaciones();
   renderCapDetail();
 }
@@ -2903,10 +2907,10 @@ function saveNewCaptacion(){
   // Save immediately — don't wait for debounce
   if(syncTimeout) clearTimeout(syncTimeout);
   syncTimeout = null;
-  saveToFirestore();
+  saveSharedMeta();
   if(syncTimeout) clearTimeout(syncTimeout);
   syncTimeout = null;
-  saveToFirestore();
+  saveSharedMeta();
   renderCaptaciones();
   renderCapDetail();
 }
@@ -3488,7 +3492,7 @@ function renderDetail(){
           '<input type="text" placeholder="Sin teléfono" value="'+p.telefono+'" '+
           'id="tel-inp-'+p.id+'" '+
           'style="font-size:12px;padding:2px 7px;height:24px;border:1px solid #ddd;border-radius:6px;background:#fff;color:#1a1a1a;outline:none;width:140px;font-family:inherit;" '+
-          'onchange="(function(v){var px=props.find(function(x){return x.id==='+p.id+';});if(px){px.telefono=v;scheduleSave();}})(this.value)" '+
+          'onchange="(function(v){var px=props.find(function(x){return x.id==='+p.id+';});if(px){px.telefono=v;saveProp(px);}})(this.value)" '+
           'onclick="event.stopPropagation()"/>'+
         '</span>'+
       '</div>'+
@@ -3502,7 +3506,7 @@ function renderDetail(){
           '<input type="text" placeholder="dd/mm/aaaa" value="'+p.ingreso+'" '+
           'class="'+((!p.ingreso && p.tokkoId)?'field-missing':'')+'"+'+
           'style="font-size:12px;padding:4px 8px;height:28px;border-radius:8px;background:#fff;color:#1a1a1a;outline:none;width:110px;font-family:inherit;border:1px solid #ddd;"+'+
-          'onchange="(function(el){var v=fixDateYear(el.value);el.value=v;props.find(function(x){return x.id==='+p.id+';}).ingreso=v;renderDetail();})(this)" '+
+          'onchange="(function(el){var v=fixDateYear(el.value);el.value=v;var px=props.find(function(x){return x.id==='+p.id+';});if(px){px.ingreso=v;saveProp(px);}renderDetail();})(this)" '+
           'onclick="event.stopPropagation()"/>'+
         '</div>'+
         '<div>'+
@@ -3976,7 +3980,9 @@ async function importarDesdeTokko(){
         var colors = ['#185FA5', '#0F6E56', '#7F77DD', '#EF9F27', '#E24B4A', '#534AB7', '#085041', '#854F0B'];
         var color = colors[asesores.length % colors.length];
         // Use Tokko email as default but admin should update with Firebase login email
-        asesores.push({id:'a'+(++nextAid), name:pName, email:pEmail, color:color, tokkoEmail:pEmail});
+        var newA={id:'a'+(++nextAid), name:pName, email:pEmail, color:color, tokkoEmail:pEmail};
+        asesores.push(newA);
+        saveAsesorDoc(newA);
         producersAdded++;
       }
     });
@@ -3984,7 +3990,7 @@ async function importarDesdeTokko(){
       renderAsesores();
       updAsesorSel();
       if(syncTimeout) clearTimeout(syncTimeout);
-      saveToFirestore();
+      saveSharedMeta();
       // Switch to Asesores tab so admin can set emails immediately
       var asesorBtn = document.getElementById('tab-btn-asesores');
       if(asesorBtn) asesorBtn.click();
@@ -4173,7 +4179,7 @@ function confirmarImportTokko(){
   renderDetail();
   // Save immediately after import — don't debounce
   if(syncTimeout) clearTimeout(syncTimeout);
-  saveToFirestore();
+  saveSharedMeta();
   alert('✅ '+checks.length+' propiedad'+(checks.length>1?'es importadas':' importada')+' correctamente.');
 }
 
@@ -4250,28 +4256,70 @@ function initAuthListener(){
 initAuthListener();
 
 // ── Save to Firestore ─────────────────────────────────────────────────────────
-function saveToFirestore(){
+// ── Individual document save functions ────────────────────────────────────────
+
+function saveProp(p){
+  if(!currentUser || !p) return;
+  window._fb.setDoc(window._fb.doc(window._fb.db,'sessa_props',String(p.id)),
+    JSON.parse(JSON.stringify(p)))
+    .catch(function(e){ console.error('[Sessa] saveProp error:',e); });
+}
+
+function saveComp(c){
+  if(!currentUser || !c) return;
+  window._fb.setDoc(window._fb.doc(window._fb.db,'sessa_comp',String(c.id)),
+    JSON.parse(JSON.stringify(c)))
+    .catch(function(e){ console.error('[Sessa] saveComp error:',e); });
+}
+
+function saveCap(c){
+  if(!currentUser || !c) return;
+  window._fb.setDoc(window._fb.doc(window._fb.db,'sessa_cap',String(c.id)),
+    JSON.parse(JSON.stringify(c)))
+    .catch(function(e){ console.error('[Sessa] saveCap error:',e); });
+}
+
+function saveAsesorDoc(a){
+  if(!currentUser || !a) return;
+  window._fb.setDoc(window._fb.doc(window._fb.db,'sessa_asesores',String(a.id)),
+    JSON.parse(JSON.stringify(a)))
+    .catch(function(e){ console.error('[Sessa] saveAsesor error:',e); });
+}
+
+function saveMeta(){
   if(!currentUser) return;
-  var fb = window._fb;
-  _isSaving = true;
-  // Use setDoc with merge:true so concurrent users don't fully overwrite each other
-  fb.setDoc(fb.doc(fb.db,'sessa','shared'), {
-    props: JSON.parse(JSON.stringify(props)),
-    compradores: JSON.parse(JSON.stringify(compradores)),
-    asesores: JSON.parse(JSON.stringify(asesores)),
-    captaciones: JSON.parse(JSON.stringify(captaciones)),
+  window._fb.setDoc(window._fb.doc(window._fb.db,'sessa_meta','shared'), {
     reservasLog: JSON.parse(JSON.stringify(reservasLog)),
-    visitasDB: JSON.parse(JSON.stringify(visitasDB)),
+    visitasDB:   JSON.parse(JSON.stringify(visitasDB)),
     metaMensual: metaMensual,
-    nextId: nextId,
-    nextCid: nextCid,
-    nextAid: nextAid,
-    nextCapId: nextCapId,
-  }, { merge: true }).then(function(){ _isSaving = false; }).catch(function(){ _isSaving = false; });
-  // Private data: Mi día per user
-  fb.setDoc(fb.doc(fb.db,'tareas',currentUser.uid), {
-    tareasPerAsesor: JSON.parse(JSON.stringify(tareasPerAsesor))
-  });
+    nextId:      nextId,
+    nextCid:     nextCid,
+    nextAid:     nextAid,
+    nextCapId:   nextCapId,
+  }, {merge:true}).catch(function(e){ console.error('[Sessa] saveMeta error:',e); });
+}
+
+function saveSharedMeta(){
+  // Legacy alias — saves metadata only
+  saveMeta();
+}
+
+function deletePropDoc(id){
+  if(!currentUser) return;
+  window._fb.deleteDoc(window._fb.doc(window._fb.db,'sessa_props',String(id)))
+    .catch(function(e){ console.error('[Sessa] deleteProp error:',e); });
+}
+
+function deleteCompDoc(id){
+  if(!currentUser) return;
+  window._fb.deleteDoc(window._fb.doc(window._fb.db,'sessa_comp',String(id)))
+    .catch(function(e){ console.error('[Sessa] deleteComp error:',e); });
+}
+
+function deleteCapDoc(id){
+  if(!currentUser) return;
+  window._fb.deleteDoc(window._fb.doc(window._fb.db,'sessa_cap',String(id)))
+    .catch(function(e){ console.error('[Sessa] deleteCap error:',e); });
 }
 
 function scheduleSave(){
@@ -4279,7 +4327,7 @@ function scheduleSave(){
   // Save immediately — debounce was causing data loss
   syncTimeout = setTimeout(function(){
     syncTimeout = null;
-    saveToFirestore();
+    saveSharedMeta();
   }, 300);
 }
 
@@ -4334,15 +4382,8 @@ function startSync(){
 var _remoteUpdate = false; // true while applying remote Firebase data
 
 var _origRenderGrid = renderGrid;
-var _renderGridOnly = function(){ _origRenderGrid(); }; // raw, no save
-renderGrid = function(){
-  _origRenderGrid();
-  if(!_remoteUpdate){
-    // Immediate save — no debounce to avoid race conditions
-    if(syncTimeout){ clearTimeout(syncTimeout); syncTimeout = null; }
-    saveToFirestore();
-  }
-};
+var _renderGridOnly = function(){ _origRenderGrid(); };
+renderGrid = function(){ _origRenderGrid(); };
 
 var _origRenderCompradores = renderCompradores;
 var _renderCompradoresOnly = function(){ _origRenderCompradores(); }; // raw, no save
@@ -4354,32 +4395,17 @@ renderCompradores = function(){
 var _origRenderTareas = renderTareas;
 renderTareas = function(){
   _origRenderTareas();
-  if(!_remoteUpdate){
-    scheduleSave();
-    saveMiDia();
-  }
+  if(!_remoteUpdate) saveMiDia();
 };
 
 var _origRenderCaptaciones = renderCaptaciones;
-renderCaptaciones = function(){
-  _origRenderCaptaciones();
-  if(!_remoteUpdate) scheduleSave();
-};
+renderCaptaciones = function(){ _origRenderCaptaciones(); };
 
 var _origRenderDetail = renderDetail;
-renderDetail = function(){
-  _origRenderDetail();
-  if(!_remoteUpdate){
-    if(syncTimeout){ clearTimeout(syncTimeout); syncTimeout = null; }
-    saveToFirestore();
-  }
-};
+renderDetail = function(){ _origRenderDetail(); };
 
 var _origRenderAsesores = renderAsesores;
-renderAsesores = function(){
-  _origRenderAsesores();
-  if(!_remoteUpdate) scheduleSave();
-};
+renderAsesores = function(){ _origRenderAsesores(); };
 
 // Initial render
 renderGrid();
