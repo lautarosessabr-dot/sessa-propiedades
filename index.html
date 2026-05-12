@@ -3386,47 +3386,34 @@ function openNuevaBusqueda(){
     '</select></div>' : '';
 
   overlay.innerHTML =
-    '<div class="resumen-modal" style="max-width:480px;">'+
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">'+
+    '<div class="resumen-modal" style="max-width:500px;">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">'+
         '<h3 style="font-size:16px;font-weight:700;">🔍 Nueva búsqueda activa</h3>'+
         '<button onclick="closeBusquedaModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#888;">×</button>'+
       '</div>'+
       '<div style="display:flex;flex-direction:column;gap:12px;">'+
-        asesorSel+
-        '<div class="form-group"><label>Nombre del cliente *</label>'+
-          '<input id="bq-nombre" type="text" placeholder="ej: Juan García"/></div>'+
-        '<div class="form-group"><label>Teléfono</label>'+
-          '<input id="bq-tel" type="text" placeholder="ej: 221 123 4567"/></div>'+
-        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'+
-          '<div class="form-group"><label>Tipo de propiedad</label>'+
-            '<select id="bq-tipo">'+
-              '<option value="">Cualquiera</option>'+
-              ['Casa','Dpto','PH','Monoambiente','Lote','Galpon','Local'].map(function(t){return '<option>'+t+'</option>';}).join('')+
-            '</select></div>'+
-          '<div class="form-group"><label>Zona</label>'+
-            '<input id="bq-zona" type="text" placeholder="ej: City Bell, La Plata"/></div>'+
+        (asesorSel||'')+
+        '<div class="form-group">'+
+          '<label>Nombre del cliente *</label>'+
+          '<input id="bq-nombre" type="text" placeholder="ej: Juan García"/>'+
         '</div>'+
-        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'+
-          '<div class="form-group"><label>Presupuesto desde</label>'+
-            '<input id="bq-desde" type="text" placeholder="ej: USD 80.000"/></div>'+
-          '<div class="form-group"><label>Presupuesto hasta</label>'+
-            '<input id="bq-hasta" type="text" placeholder="ej: USD 120.000"/></div>'+
+        '<div class="form-group">'+
+          '<label>Teléfono</label>'+
+          '<input id="bq-tel" type="text" placeholder="ej: 221 123 4567"/>'+
         '</div>'+
-        '<div class="form-group"><label>Características / observaciones</label>'+
-          '<textarea id="bq-obs" rows="3" placeholder="ej: 3 dormitorios, cochera, apto banco, planta baja..." '+
-          'style="width:100%;font-size:13px;padding:8px;border:1px solid #ddd;border-radius:8px;font-family:inherit;resize:vertical;outline:none;margin-top:4px;"></textarea></div>'+
-        '<div class="form-group"><label>Estado</label>'+
-          '<select id="bq-estado">'+
-            '<option value="activa">🟢 Activa</option>'+
-            '<option value="pausada">🟡 Pausada</option>'+
-            '<option value="cerrada">⚫ Cerrada</option>'+
-          '</select></div>'+
+        '<div class="form-group">'+
+          '<label>Pegá el texto de búsqueda *</label>'+
+          '<div style="font-size:11px;color:#aaa;margin-bottom:4px;">Copiá el mensaje que mandás al grupo de WhatsApp y pegalo acá</div>'+
+          '<textarea id="bq-texto" rows="7" '+
+          'style="width:100%;font-size:13px;padding:10px;border:1px solid #ddd;border-radius:8px;font-family:inherit;resize:vertical;outline:none;line-height:1.6;" '+
+          'placeholder="🔎 BÚSQUEDA&#10;🏢 Departamento&#10;🛏️ 2 dormitorios&#10;📍 Zona: 32 a 70&#10;💰 U$D 70.000"></textarea>'+
+        '</div>'+
       '</div>'+
-      '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px;padding-top:14px;border-top:1px solid #eee;">'+
+      '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;padding-top:14px;border-top:1px solid #eee;">'+
         '<button onclick="closeBusquedaModal()" '+
         'style="height:36px;padding:0 16px;font-size:13px;border:1px solid #ddd;border-radius:8px;background:#fff;cursor:pointer;font-family:inherit;">Cancelar</button>'+
         '<button onclick="guardarNuevaBusqueda()" '+
-        'style="height:36px;padding:0 18px;font-size:13px;font-weight:700;border:none;border-radius:8px;background:#185FA5;color:#fff;cursor:pointer;font-family:inherit;">💾 Guardar búsqueda</button>'+
+        'style="height:36px;padding:0 18px;font-size:13px;font-weight:700;border:none;border-radius:8px;background:#185FA5;color:#fff;cursor:pointer;font-family:inherit;">💾 Guardar</button>'+
       '</div>'+
     '</div>';
   document.body.appendChild(overlay);
@@ -3440,13 +3427,14 @@ function closeBusquedaModal(){
 
 function guardarNuevaBusqueda(){
   var nombre = document.getElementById('bq-nombre').value.trim();
+  var texto  = document.getElementById('bq-texto').value.trim();
   if(!nombre){ alert('El nombre del cliente es obligatorio'); return; }
+  if(!texto){  alert('Pegá el texto de búsqueda'); return; }
 
   var me = getMyAsesor();
-  var asesorId = me ? me.id : 'admin';
+  var asesorId   = me ? me.id   : 'admin';
   var asesorName = me ? me.name : 'Admin';
 
-  // Admin can pick asesor
   var bqAsesor = document.getElementById('bq-asesor');
   if(isAdmin() && bqAsesor && bqAsesor.value){
     var parts = bqAsesor.value.split('|');
@@ -3457,23 +3445,19 @@ function guardarNuevaBusqueda(){
   var fecha = String(today.getDate()).padStart(2,'0')+'/'+String(today.getMonth()+1).padStart(2,'0')+'/'+today.getFullYear();
 
   var b = {
-    id:         Date.now(),
-    nombre:     nombre,
-    telefono:   document.getElementById('bq-tel').value.trim(),
-    tipo:       document.getElementById('bq-tipo').value,
-    zona:       document.getElementById('bq-zona').value.trim(),
-    desde:      document.getElementById('bq-desde').value.trim(),
-    hasta:      document.getElementById('bq-hasta').value.trim(),
-    obs:        document.getElementById('bq-obs').value.trim(),
-    estado:     document.getElementById('bq-estado').value,
-    asesorId:   asesorId,
-    asesorName: asesorName,
-    fecha:      fecha,
+    id:          Date.now(),
+    nombre:      nombre,
+    telefono:    document.getElementById('bq-tel').value.trim(),
+    texto:       texto,
+    estado:      'activa',
+    asesorId:    asesorId,
+    asesorName:  asesorName,
+    fecha:       fecha,
     sugerencias: [],
   };
 
   saveBusqueda(b);
-  document.getElementById('busqueda-overlay').remove();
+  closeBusquedaModal();
   renderBusquedas();
 }
 
@@ -3481,18 +3465,15 @@ function renderBusquedas(){
   var el = document.getElementById('busquedas-content'); if(!el) return;
 
   var searchQ  = document.getElementById('bq-search')  ? document.getElementById('bq-search').value.toLowerCase()  : '';
-  var filtTipo = document.getElementById('bq-filt-tipo')? document.getElementById('bq-filt-tipo').value : '';
   var filtEst  = document.getElementById('bq-filt-est') ? document.getElementById('bq-filt-est').value  : '';
   var filtAs   = document.getElementById('bq-filt-as')  ? document.getElementById('bq-filt-as').value   : '';
 
   var visible = busquedas.filter(function(b){
     if(searchQ && !b.nombre.toLowerCase().includes(searchQ) &&
-       !(b.zona||'').toLowerCase().includes(searchQ) &&
-       !(b.obs||'').toLowerCase().includes(searchQ) &&
+       !(b.texto||'').toLowerCase().includes(searchQ) &&
        !(b.telefono||'').includes(searchQ)) return false;
-    if(filtTipo && b.tipo !== filtTipo) return false;
-    if(filtEst  && b.estado !== filtEst)  return false;
-    if(filtAs   && b.asesorId !== filtAs) return false;
+    if(filtEst && b.estado !== filtEst)  return false;
+    if(filtAs  && b.asesorId !== filtAs) return false;
     return true;
   });
 
@@ -3508,10 +3489,6 @@ function renderBusquedas(){
   h += '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px;">'+
     '<input id="bq-search" type="text" placeholder="Buscar cliente, zona..." value="'+searchQ+'" oninput="renderBusquedas()" '+
     'style="flex:1;min-width:180px;height:36px;padding:0 12px;font-size:13px;border:1px solid #ddd;border-radius:8px;background:#fff;color:#1a1a1a;outline:none;font-family:inherit;"/>'+
-    '<select id="bq-filt-tipo" onchange="renderBusquedas()" style="height:36px;padding:0 10px;font-size:12px;border:1px solid #ddd;border-radius:8px;background:#fff;outline:none;font-family:inherit;">'+
-      '<option value="">Todos los tipos</option>'+
-      ['Casa','Dpto','PH','Monoambiente','Lote','Galpon','Local'].map(function(t){return '<option value="'+t+'"'+(filtTipo===t?' selected':'')+'>'+t+'</option>';}).join('')+
-    '</select>'+
     '<select id="bq-filt-est" onchange="renderBusquedas()" style="height:36px;padding:0 10px;font-size:12px;border:1px solid #ddd;border-radius:8px;background:#fff;outline:none;font-family:inherit;">'+
       '<option value="">Todos los estados</option>'+
       '<option value="activa"'+(filtEst==='activa'?' selected':'')+'>🟢 Activas</option>'+
