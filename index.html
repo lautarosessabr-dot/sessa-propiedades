@@ -4192,6 +4192,10 @@ function doLogin(){
 
 function doLogout(){
   if(!confirm('¿Cerrar sesión?')) return;
+  // Cancel any pending debounced save
+  if(syncTimeout){ clearTimeout(syncTimeout); syncTimeout = null; }
+  // Unsubscribe from Firestore listeners BEFORE signing out
+  // so no snapshot arrives during cleanup
   unsubscribers.forEach(function(u){ try{ u(); }catch(e){} });
   unsubscribers = [];
   window._fb.signOut(window._fb.auth);
@@ -4216,7 +4220,10 @@ function initAuthListener(){
     document.getElementById('user-name').textContent = name;
     startSync();
   } else {
+    // Cancel any pending save before clearing user
+    if(syncTimeout){ clearTimeout(syncTimeout); syncTimeout = null; }
     currentUser = null;
+    currentUserEmail = '';
     document.getElementById('login-screen').style.display = 'flex';
     document.getElementById('main-app').style.display = 'none';
     document.getElementById('user-pill').style.display = 'none';
@@ -4228,6 +4235,11 @@ initAuthListener();
 // ── Save to Firestore ─────────────────────────────────────────────────────────
 function saveToFirestore(){
   if(!currentUser) return;
+  // Safety: never save empty props if we had data before
+  if(props.length === 0 && _lastSavedAt > 0){
+    console.warn('[Sessa] Blocked empty save — props was non-empty before');
+    return;
+  }
   var fb = window._fb;
   var now = Date.now();
   _lastSavedAt = now;
