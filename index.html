@@ -1303,6 +1303,8 @@ function setTab(tab, el){
   if(tab==='visitasdb')    renderVisitasDB();
   if(tab==='busquedas')    renderBusquedas();
   document.getElementById('tab-captaciones').style.display = tab==='captaciones' ? '' : 'none';
+  document.getElementById('tab-visitasdb').style.display   = tab==='visitasdb'   ? '' : 'none';
+  document.getElementById('tab-busquedas').style.display   = tab==='busquedas'   ? '' : 'none';
 }
 
 // ── Modales ───────────────────────────────────────────────────────────────────
