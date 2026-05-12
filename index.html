@@ -4332,47 +4332,80 @@ function scheduleSave(){
 }
 
 // ── Load from Firestore & listen ──────────────────────────────────────────────
+function applyChange(arr, doc, type){
+  var d = doc.data();
+  if(type === 'removed'){
+    return arr.filter(function(x){ return String(x.id) !== String(d.id); });
+  }
+  var idx = arr.findIndex(function(x){ return String(x.id) === String(d.id); });
+  if(idx >= 0) arr[idx] = d; else arr.push(d);
+  return arr;
+}
+
 function startSync(){
   var fb = window._fb;
 
-  // 1. Listen to shared data (real-time)
-  var _isSaving = false; // true while we are writing to Firebase
-
-  var unsubShared = fb.onSnapshot(fb.doc(fb.db,'sessa','shared'), function(snap){
-    if(!snap.exists()) return;
-    // Skip snapshot triggered by our own save
-    if(_isSaving) return;
-
-    var data = snap.data();
+  // Props — each prop is its own document
+  var unsubProps = fb.onSnapshot(fb.collection(fb.db,'sessa_props'), function(snap){
     _remoteUpdate = true;
-    if(data.props !== undefined)       { props = data.props;             nextId    = data.nextId    || nextId;   }
-    if(data.compradores !== undefined) { compradores = data.compradores; nextCid   = data.nextCid   || nextCid;  }
-    if(data.asesores !== undefined)    { asesores = data.asesores;       nextAid   = data.nextAid   || nextAid;  }
-    if(data.captaciones !== undefined) { captaciones = data.captaciones; nextCapId = data.nextCapId || nextCapId; }
-    if(data.reservasLog !== undefined) { reservasLog = data.reservasLog; }
-    if(data.visitasDB !== undefined)   { visitasDB = data.visitasDB; }
-    if(data.metaMensual !== undefined) { metaMensual = data.metaMensual; }
+    snap.docChanges().forEach(function(ch){ props = applyChange(props, ch.doc, ch.type); });
+    props.forEach(function(p){ if(p.id >= nextId) nextId = p.id + 1; });
     _remoteUpdate = false;
-
     _renderGridOnly();
-    _renderCompradoresOnly();
-    updAsesorSel();
-    if(typeof renderAsesores === 'function') renderAsesores();
     if(activeProp) _origRenderDetail();
+  });
+  unsubscribers.push(unsubProps);
+
+  // Compradores — each comprador is its own document
+  var unsubComp = fb.onSnapshot(fb.collection(fb.db,'sessa_comp'), function(snap){
+    _remoteUpdate = true;
+    snap.docChanges().forEach(function(ch){ compradores = applyChange(compradores, ch.doc, ch.type); });
+    compradores.forEach(function(c){ if(c.id >= nextCid) nextCid = c.id + 1; });
+    _remoteUpdate = false;
+    _renderCompradoresOnly();
     if(activeComprador) renderCompradorDetail();
   });
-  unsubscribers.push(unsubShared);
+  unsubscribers.push(unsubComp);
 
-  // 2. Load private Mi día data
+  // Captaciones — each captacion is its own document
+  var unsubCap = fb.onSnapshot(fb.collection(fb.db,'sessa_cap'), function(snap){
+    _remoteUpdate = true;
+    snap.docChanges().forEach(function(ch){ captaciones = applyChange(captaciones, ch.doc, ch.type); });
+    captaciones.forEach(function(c){ if(c.id >= nextCapId) nextCapId = c.id + 1; });
+    _remoteUpdate = false;
+    var capTab = document.getElementById('tab-captaciones');
+    if(capTab && capTab.style.display !== 'none') _origRenderCaptaciones();
+  });
+  unsubscribers.push(unsubCap);
+
+  // Asesores — each asesor is its own document
+  var unsubAses = fb.onSnapshot(fb.collection(fb.db,'sessa_asesores'), function(snap){
+    _remoteUpdate = true;
+    snap.docChanges().forEach(function(ch){ asesores = applyChange(asesores, ch.doc, ch.type); });
+    _remoteUpdate = false;
+    updAsesorSel();
+    _origRenderAsesores();
+  });
+  unsubscribers.push(unsubAses);
+
+  // Metadata — reservas, visitas, meta mensual
+  var unsubMeta = fb.onSnapshot(fb.doc(fb.db,'sessa_meta','shared'), function(snap){
+    if(!snap.exists()) return;
+    var data = snap.data();
+    if(data.reservasLog !== undefined) reservasLog = data.reservasLog;
+    if(data.visitasDB !== undefined)   visitasDB   = data.visitasDB;
+    if(data.metaMensual !== undefined) metaMensual = data.metaMensual;
+  });
+  unsubscribers.push(unsubMeta);
+
+  // Mi día — private per user
   fb.getDoc(fb.doc(fb.db,'tareas',currentUser.uid)).then(function(snap){
     if(snap.exists() && snap.data().tareasPerAsesor){
       tareasPerAsesor = snap.data().tareasPerAsesor;
     }
-    // Auto-select asesor for current user
     var me = getMyAsesor();
     if(me) tareasAsesorActivo = me.id;
     else if(asesores.length) tareasAsesorActivo = asesores[0].id;
-    // Render if tareas tab is visible
     var tabEl = document.getElementById('tab-tareas');
     if(tabEl && tabEl.style.display !== 'none') renderTareas();
   });
