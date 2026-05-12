@@ -262,6 +262,7 @@ body.dark #dark-toggle{background:#333;border-color:#444;color:#fff;}display:inl
     <button class="tab" id="tab-btn-stats" onclick="setTab('stats',this)">📊 Estadísticas</button>
     <button class="tab" onclick="setTab('captaciones',this)">🎯 Captaciones</button>
     <button class="tab" onclick="setTab('visitasdb',this)">🗂 Base de visitas</button>
+    <button class="tab" onclick="setTab('busquedas',this)">🔍 Búsquedas activas</button>
     <button class="tab" onclick="setTab('tareas',this)">📋 Mi día</button>
   </div>
   <div id="tab-props">
@@ -271,7 +272,7 @@ body.dark #dark-toggle{background:#333;border-color:#444;color:#fff;}display:inl
         <option value="">Todos los tipos</option>
         <option>Casa</option><option>Dpto</option><option>PH</option><option>Monoambiente</option><option>Lote</option><option>Galpon</option><option>Local</option>
       </select>
-      <select id="filt-asesor" onchange="renderGrid()">
+      <select id="filt-asesor" onchange="renderGrid()" style="height:36px;padding:0 10px;font-size:12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);outline:none;font-family:inherit;">
         <option value="">Todos los asesores</option>
       </select>
       <select id="sort-props" onchange="renderGrid()" style="height:36px;padding:0 10px;font-size:13px;border:1px solid #ddd;border-radius:8px;background:#fff;color:#1a1a1a;outline:none;font-family:inherit;">
@@ -303,6 +304,10 @@ body.dark #dark-toggle{background:#333;border-color:#444;color:#fff;}display:inl
     <div id="modal-comprador-area"></div>
     <div id="comprador-list-el"></div>
     <div id="comprador-detail"></div>
+  </div>
+
+  <div id="tab-busquedas" style="display:none;">
+    <div id="busquedas-content"></div>
   </div>
 
   <div id="tab-visitasdb" style="display:none;">
@@ -547,6 +552,27 @@ function guardarVisita(pid){
   renderDetail();
   renderGrid();
   renderVisitasDB();
+}
+
+function guardadoManualComp(cid){
+  var c = compradores.find(function(x){ return x.id===cid; }); if(!c) return;
+  saveComp(c);
+}
+
+function guardadoManual(pid){
+  var p = props.find(function(x){ return x.id===pid; }); if(!p) return;
+  saveProp(p);
+  // Show confirmation toast
+  var ind = document.getElementById('save-indicator');
+  if(ind){
+    ind.style.display = 'block';
+    ind.style.opacity = '1';
+    ind.textContent = '✅ Guardado';
+    setTimeout(function(){
+      ind.style.opacity = '0';
+      setTimeout(function(){ ind.style.display = 'none'; }, 300);
+    }, 2000);
+  }
 }
 
 function savePubField(pid, val){
@@ -1275,6 +1301,7 @@ function setTab(tab, el){
   if(tab==='stats')       renderStats();
   if(tab==='captaciones')  renderCaptaciones();
   if(tab==='visitasdb')    renderVisitasDB();
+  if(tab==='busquedas')    renderBusquedas();
   document.getElementById('tab-captaciones').style.display = tab==='captaciones' ? '' : 'none';
 }
 
@@ -2791,7 +2818,8 @@ function generarInforme(){
 var captaciones = [];
 var nextCapId = 1;
 var reservasLog = [];
-var visitasDB    = []; // global cross-property visitors database
+var visitasDB    = [];
+var busquedas   = []; // active property searches
 var metaMensual = 3; // default meta
 var activeCap = null;
 
@@ -2961,7 +2989,7 @@ function renderCaptaciones(){
     '<div style="font-size:13px;font-weight:700;color:#1a1a1a;">'+activas.length+' captación'+(activas.length!==1?'es':'')+' activa'+(activas.length!==1?'s':'')+
     (cerradas.length?' <span style="color:#aaa;font-weight:400;font-size:12px;">· '+cerradas.length+' cerrada'+(cerradas.length!==1?'s':'')+'</span>':'')+
     '</div>'+
-    (!isAdmin() ? '<button class="btn btn-primary" onclick="openCapModal()">+ Nueva captación</button>' : '')+
+    '<button class="btn btn-primary" onclick="openCapModal()">+ Nueva captación</button>'+
   '</div>';
 
   // Admin search bar
@@ -3310,12 +3338,340 @@ function renderCapDetail(){
 
   // Created at
   var createdDate = new Date(c.createdAt).toLocaleDateString('es-AR',{day:'numeric',month:'long',year:'numeric'});
-  h += '<div style="font-size:11px;color:#ccc;margin-top:8px;text-align:right;">Creada el '+createdDate+'</div>';
+  h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;">'+
+    '<div style="font-size:11px;color:#ccc;">Creada el '+createdDate+'</div>'+
+    '<button data-cid="'+c.id+'" onclick="event.stopPropagation();var cx=captaciones.find(function(x){return x.id===parseInt(this.dataset.cid);});if(cx)saveCap(cx);" '+
+    'style="height:28px;padding:0 12px;font-size:11px;font-weight:700;border:none;border-radius:8px;background:#185FA5;color:#fff;cursor:pointer;font-family:inherit;">💾 Guardar</button>'+
+  '</div>';
 
   h += '</div>';
   el.innerHTML = h;
 }
 
+
+
+// ── BÚSQUEDAS ACTIVAS ─────────────────────────────────────────────────────────
+
+function saveBusqueda(b){
+  busquedas = busquedas.filter(function(x){ return x.id !== b.id; });
+  busquedas.unshift(b);
+  saveMeta();
+  showSaveToast('✅ Búsqueda guardada');
+}
+
+function deleteBusqueda(id){
+  if(!confirm('¿Eliminar esta búsqueda?')) return;
+  busquedas = busquedas.filter(function(x){ return x.id !== id; });
+  saveMeta();
+  renderBusquedas();
+}
+
+function openNuevaBusqueda(){
+  var me = getMyAsesor();
+  var asesorName = me ? me.name : (isAdmin() ? 'Admin' : '');
+  var asesorId   = me ? me.id   : 'admin';
+  var today = new Date();
+  var fecha = String(today.getDate()).padStart(2,'0')+'/'+String(today.getMonth()+1).padStart(2,'0')+'/'+today.getFullYear();
+
+  var overlay = document.createElement('div');
+  overlay.id = 'busqueda-overlay';
+  overlay.className = 'resumen-overlay';
+  overlay.onclick = function(e){ if(e.target===overlay) overlay.remove(); };
+
+  var asesorSel = isAdmin() ?
+    '<div class="form-group"><label>Asesor</label><select id="bq-asesor">'+
+      asesores.map(function(a){ return '<option value="'+a.id+'|'+a.name+'">'+a.name+'</option>'; }).join('')+
+    '</select></div>' : '';
+
+  overlay.innerHTML =
+    '<div class="resumen-modal" style="max-width:480px;">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">'+
+        '<h3 style="font-size:16px;font-weight:700;">🔍 Nueva búsqueda activa</h3>'+
+        '<button onclick="closeBusquedaModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#888;">×</button>'+
+      '</div>'+
+      '<div style="display:flex;flex-direction:column;gap:12px;">'+
+        asesorSel+
+        '<div class="form-group"><label>Nombre del cliente *</label>'+
+          '<input id="bq-nombre" type="text" placeholder="ej: Juan García"/></div>'+
+        '<div class="form-group"><label>Teléfono</label>'+
+          '<input id="bq-tel" type="text" placeholder="ej: 221 123 4567"/></div>'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'+
+          '<div class="form-group"><label>Tipo de propiedad</label>'+
+            '<select id="bq-tipo">'+
+              '<option value="">Cualquiera</option>'+
+              ['Casa','Dpto','PH','Monoambiente','Lote','Galpon','Local'].map(function(t){return '<option>'+t+'</option>';}).join('')+
+            '</select></div>'+
+          '<div class="form-group"><label>Zona</label>'+
+            '<input id="bq-zona" type="text" placeholder="ej: City Bell, La Plata"/></div>'+
+        '</div>'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'+
+          '<div class="form-group"><label>Presupuesto desde</label>'+
+            '<input id="bq-desde" type="text" placeholder="ej: USD 80.000"/></div>'+
+          '<div class="form-group"><label>Presupuesto hasta</label>'+
+            '<input id="bq-hasta" type="text" placeholder="ej: USD 120.000"/></div>'+
+        '</div>'+
+        '<div class="form-group"><label>Características / observaciones</label>'+
+          '<textarea id="bq-obs" rows="3" placeholder="ej: 3 dormitorios, cochera, apto banco, planta baja..." '+
+          'style="width:100%;font-size:13px;padding:8px;border:1px solid #ddd;border-radius:8px;font-family:inherit;resize:vertical;outline:none;margin-top:4px;"></textarea></div>'+
+        '<div class="form-group"><label>Estado</label>'+
+          '<select id="bq-estado">'+
+            '<option value="activa">🟢 Activa</option>'+
+            '<option value="pausada">🟡 Pausada</option>'+
+            '<option value="cerrada">⚫ Cerrada</option>'+
+          '</select></div>'+
+      '</div>'+
+      '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px;padding-top:14px;border-top:1px solid #eee;">'+
+        '<button onclick="closeBusquedaModal()" '+
+        'style="height:36px;padding:0 16px;font-size:13px;border:1px solid #ddd;border-radius:8px;background:#fff;cursor:pointer;font-family:inherit;">Cancelar</button>'+
+        '<button onclick="guardarNuevaBusqueda()" '+
+        'style="height:36px;padding:0 18px;font-size:13px;font-weight:700;border:none;border-radius:8px;background:#185FA5;color:#fff;cursor:pointer;font-family:inherit;">💾 Guardar búsqueda</button>'+
+      '</div>'+
+    '</div>';
+  document.body.appendChild(overlay);
+  setTimeout(function(){ document.getElementById('bq-nombre').focus(); }, 100);
+}
+
+function closeBusquedaModal(){
+  var el=document.getElementById('busqueda-overlay');
+  if(el) el.remove();
+}
+
+function guardarNuevaBusqueda(){
+  var nombre = document.getElementById('bq-nombre').value.trim();
+  if(!nombre){ alert('El nombre del cliente es obligatorio'); return; }
+
+  var me = getMyAsesor();
+  var asesorId = me ? me.id : 'admin';
+  var asesorName = me ? me.name : 'Admin';
+
+  // Admin can pick asesor
+  var bqAsesor = document.getElementById('bq-asesor');
+  if(isAdmin() && bqAsesor && bqAsesor.value){
+    var parts = bqAsesor.value.split('|');
+    asesorId = parts[0]; asesorName = parts[1]||'';
+  }
+
+  var today = new Date();
+  var fecha = String(today.getDate()).padStart(2,'0')+'/'+String(today.getMonth()+1).padStart(2,'0')+'/'+today.getFullYear();
+
+  var b = {
+    id:         Date.now(),
+    nombre:     nombre,
+    telefono:   document.getElementById('bq-tel').value.trim(),
+    tipo:       document.getElementById('bq-tipo').value,
+    zona:       document.getElementById('bq-zona').value.trim(),
+    desde:      document.getElementById('bq-desde').value.trim(),
+    hasta:      document.getElementById('bq-hasta').value.trim(),
+    obs:        document.getElementById('bq-obs').value.trim(),
+    estado:     document.getElementById('bq-estado').value,
+    asesorId:   asesorId,
+    asesorName: asesorName,
+    fecha:      fecha,
+    sugerencias: [],
+  };
+
+  saveBusqueda(b);
+  document.getElementById('busqueda-overlay').remove();
+  renderBusquedas();
+}
+
+function renderBusquedas(){
+  var el = document.getElementById('busquedas-content'); if(!el) return;
+
+  var searchQ  = document.getElementById('bq-search')  ? document.getElementById('bq-search').value.toLowerCase()  : '';
+  var filtTipo = document.getElementById('bq-filt-tipo')? document.getElementById('bq-filt-tipo').value : '';
+  var filtEst  = document.getElementById('bq-filt-est') ? document.getElementById('bq-filt-est').value  : '';
+  var filtAs   = document.getElementById('bq-filt-as')  ? document.getElementById('bq-filt-as').value   : '';
+
+  var visible = busquedas.filter(function(b){
+    if(searchQ && !b.nombre.toLowerCase().includes(searchQ) &&
+       !(b.zona||'').toLowerCase().includes(searchQ) &&
+       !(b.obs||'').toLowerCase().includes(searchQ) &&
+       !(b.telefono||'').includes(searchQ)) return false;
+    if(filtTipo && b.tipo !== filtTipo) return false;
+    if(filtEst  && b.estado !== filtEst)  return false;
+    if(filtAs   && b.asesorId !== filtAs) return false;
+    return true;
+  });
+
+  var estadoStyles = {
+    activa:   {bg:'#E1F5EE',color:'#085041',dot:'🟢'},
+    pausada:  {bg:'#FAEEDA',color:'#854F0B',dot:'🟡'},
+    cerrada:  {bg:'#f0ede8',color:'#888',dot:'⚫'},
+  };
+
+  var h = '';
+
+  // Toolbar
+  h += '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px;">'+
+    '<input id="bq-search" type="text" placeholder="Buscar cliente, zona..." value="'+searchQ+'" oninput="renderBusquedas()" '+
+    'style="flex:1;min-width:180px;height:36px;padding:0 12px;font-size:13px;border:1px solid #ddd;border-radius:8px;background:#fff;color:#1a1a1a;outline:none;font-family:inherit;"/>'+
+    '<select id="bq-filt-tipo" onchange="renderBusquedas()" style="height:36px;padding:0 10px;font-size:12px;border:1px solid #ddd;border-radius:8px;background:#fff;outline:none;font-family:inherit;">'+
+      '<option value="">Todos los tipos</option>'+
+      ['Casa','Dpto','PH','Monoambiente','Lote','Galpon','Local'].map(function(t){return '<option value="'+t+'"'+(filtTipo===t?' selected':'')+'>'+t+'</option>';}).join('')+
+    '</select>'+
+    '<select id="bq-filt-est" onchange="renderBusquedas()" style="height:36px;padding:0 10px;font-size:12px;border:1px solid #ddd;border-radius:8px;background:#fff;outline:none;font-family:inherit;">'+
+      '<option value="">Todos los estados</option>'+
+      '<option value="activa"'+(filtEst==='activa'?' selected':'')+'>🟢 Activas</option>'+
+      '<option value="pausada"'+(filtEst==='pausada'?' selected':'')+'>🟡 Pausadas</option>'+
+      '<option value="cerrada"'+(filtEst==='cerrada'?' selected':'')+'>⚫ Cerradas</option>'+
+    '</select>'+
+    '<select id="bq-filt-as" onchange="renderBusquedas()" style="height:36px;padding:0 10px;font-size:12px;border:1px solid #ddd;border-radius:8px;background:#fff;outline:none;font-family:inherit;">'+
+      '<option value="">Todos los asesores</option>'+
+      asesores.map(function(a){ return '<option value="'+a.id+'"'+(filtAs===a.id?' selected':'')+'>'+a.name+'</option>'; }).join('')+
+    '</select>'+
+    '<button onclick="openNuevaBusqueda()" class="btn btn-primary">+ Nueva búsqueda</button>'+
+  '</div>';
+
+  // Stats
+  var activas = busquedas.filter(function(b){return b.estado==='activa';}).length;
+  h += '<div style="display:flex;gap:10px;margin-bottom:16px;">'+
+    '<div style="padding:10px 16px;background:#E1F5EE;border-radius:10px;text-align:center;">'+
+      '<div style="font-size:22px;font-weight:800;color:#085041;">'+activas+'</div>'+
+      '<div style="font-size:11px;color:#085041;font-weight:600;">Búsquedas activas</div>'+
+    '</div>'+
+    '<div style="padding:10px 16px;background:#E6F1FB;border-radius:10px;text-align:center;">'+
+      '<div style="font-size:22px;font-weight:800;color:#185FA5;">'+busquedas.length+'</div>'+
+      '<div style="font-size:11px;color:#185FA5;font-weight:600;">Total</div>'+
+    '</div>'+
+    '<div style="padding:10px 16px;background:#fff;border:1px solid #eee;border-radius:10px;text-align:center;">'+
+      '<div style="font-size:22px;font-weight:800;color:#1a1a1a;">'+visible.length+'</div>'+
+      '<div style="font-size:11px;color:#888;font-weight:600;">Con filtro</div>'+
+    '</div>'+
+  '</div>';
+
+  if(!visible.length){
+    h += '<div class="no-sel">'+(busquedas.length===0?'No hay búsquedas cargadas. Agregá la primera con el botón de arriba.':'Sin resultados para el filtro.')+'</div>';
+    el.innerHTML = h;
+    return;
+  }
+
+  // Cards grid
+  h += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;">';
+
+  visible.forEach(function(b){
+    var a = asesores.find(function(x){return x.id===b.asesorId;})||{name:b.asesorName||'—',color:'#888'};
+    var es = estadoStyles[b.estado]||estadoStyles.activa;
+
+    h += '<div style="background:#fff;border:1px solid #eee;border-radius:14px;padding:16px;box-shadow:0 1px 4px rgba(0,0,0,.05);">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">'+
+        '<div>'+
+          '<div style="font-size:14px;font-weight:700;color:#1a1a1a;">'+b.nombre+'</div>'+
+          (b.telefono?'<div style="font-size:11px;color:#185FA5;margin-top:2px;">📞 '+b.telefono+'</div>':'')+
+        '</div>'+
+        '<span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:10px;background:'+es.bg+';color:'+es.color+';">'+es.dot+' '+b.estado.charAt(0).toUpperCase()+b.estado.slice(1)+'</span>'+
+      '</div>'+
+
+      '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">'+
+        (b.tipo?'<span style="font-size:11px;padding:2px 8px;border-radius:10px;background:#E6F1FB;color:#0C447C;font-weight:600;">'+b.tipo+'</span>':'')+
+        (b.zona?'<span style="font-size:11px;padding:2px 8px;border-radius:10px;background:#f0ede8;color:#555;">📍 '+b.zona+'</span>':'')+
+        ((b.desde||b.hasta)?'<span style="font-size:11px;padding:2px 8px;border-radius:10px;background:#E1F5EE;color:#085041;">💰 '+(b.desde||'')+(b.desde&&b.hasta?' — ':b.hasta?'hasta ':'')+(b.hasta||'')+'</span>':'')+
+      '</div>'+
+
+      (b.obs?'<div style="font-size:12px;color:#666;margin-bottom:10px;line-height:1.4;">'+b.obs+'</div>':'')+
+
+      '<div style="padding-top:10px;border-top:1px solid #f0ede8;">'+
+        // Footer row
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">'+
+          '<div style="display:flex;align-items:center;gap:5px;">'+
+            '<div style="width:8px;height:8px;border-radius:50%;background:'+a.color+';"></div>'+
+            '<span style="font-size:11px;color:#888;">'+a.name+'</span>'+
+            '<span style="font-size:10px;color:#ccc;">· '+b.fecha+'</span>'+
+          '</div>'+
+          '<div style="display:flex;gap:5px;">'+
+            '<select data-bid="'+b.id+'" onchange="cambiarEstadoBusqueda(this.dataset.bid,this.value)" '+
+            'style="height:24px;padding:0 6px;font-size:11px;border:1px solid #ddd;border-radius:6px;background:#fff;outline:none;font-family:inherit;cursor:pointer;">'+
+              '<option value="activa"'+(b.estado==='activa'?' selected':'')+'>🟢 Activa</option>'+
+              '<option value="pausada"'+(b.estado==='pausada'?' selected':'')+'>🟡 Pausada</option>'+
+              '<option value="cerrada"'+(b.estado==='cerrada'?' selected':'')+'>⚫ Cerrada</option>'+
+            '</select>'+
+            '<button data-bid="'+b.id+'" onclick="deleteBusqueda(parseInt(this.dataset.bid))" '+
+            'style="height:24px;width:24px;border:1px solid #fcc;border-radius:6px;background:#fff;color:#E24B4A;cursor:pointer;font-size:12px;">×</button>'+
+          '</div>'+
+        '</div>'+
+        // Sugerencias section
+        '<div style="background:#fafaf8;border-radius:10px;padding:10px;">'+
+          '<div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">'+
+            '🔗 Sugerencias ('+(b.sugerencias?b.sugerencias.length:0)+')'+
+          '</div>'+
+          // Existing sugerencias
+          ((b.sugerencias && b.sugerencias.length) ?
+            b.sugerencias.map(function(s){
+              var sa = asesores.find(function(x){return x.id===s.asesorId;})||{name:s.asesorName||'—',color:'#888'};
+              return '<div style="display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-bottom:1px solid #eee;margin-bottom:4px;">'+
+                '<div style="flex:1;">'+
+                  '<a href="'+s.link+'" target="_blank" style="font-size:12px;font-weight:600;color:#185FA5;text-decoration:none;word-break:break-all;">🔗 '+
+                    (s.titulo||s.link.substring(0,50)+'...')+
+                  '</a>'+
+                  (s.nota?'<div style="font-size:11px;color:#666;margin-top:2px;">'+s.nota+'</div>':'')+
+                  '<div style="font-size:10px;color:#aaa;margin-top:2px;">'+sa.name+' · '+s.fecha+'</div>'+
+                '</div>'+
+                '<button data-bid="'+b.id+'" data-sid="'+s.id+'" onclick="eliminarSugerencia(parseInt(this.dataset.bid),parseInt(this.dataset.sid))" '+
+                'style="height:20px;width:20px;border:1px solid #fcc;border-radius:5px;background:#fff;color:#E24B4A;cursor:pointer;font-size:11px;flex-shrink:0;">×</button>'+
+              '</div>';
+            }).join('')
+          : '<div style="font-size:11px;color:#bbb;text-align:center;padding:4px 0;">Sin sugerencias aún</div>')+
+          // Add sugerencia form
+          '<div style="margin-top:8px;display:flex;flex-direction:column;gap:6px;" id="sug-form-'+b.id+'">'+
+            '<input type="text" id="sug-link-'+b.id+'" placeholder="🔗 Pegá el link de la propiedad..." '+
+            'style="width:100%;height:30px;padding:0 8px;font-size:12px;border:1px solid #ddd;border-radius:6px;background:#fff;outline:none;font-family:inherit;"/>'+
+            '<div style="display:flex;gap:6px;">'+
+              '<input type="text" id="sug-nota-'+b.id+'" placeholder="Comentario opcional..." '+
+              'style="flex:1;height:28px;padding:0 8px;font-size:12px;border:1px solid #ddd;border-radius:6px;background:#fff;outline:none;font-family:inherit;"/>'+
+              '<button data-bid="'+b.id+'" onclick="agregarSugerencia(parseInt(this.dataset.bid))" '+
+              'style="height:28px;padding:0 12px;font-size:11px;font-weight:700;border:none;border-radius:6px;background:#185FA5;color:#fff;cursor:pointer;font-family:inherit;white-space:nowrap;">+ Agregar</button>'+
+            '</div>'+
+          '</div>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  });
+
+  h += '</div>';
+  el.innerHTML = h;
+}
+
+function agregarSugerencia(bid){
+  var b = busquedas.find(function(x){ return x.id===bid; }); if(!b) return;
+  var linkEl = document.getElementById('sug-link-'+bid);
+  var notaEl = document.getElementById('sug-nota-'+bid);
+  if(!linkEl) return;
+  var link = linkEl.value.trim();
+  if(!link){ alert('Pegá un link'); return; }
+  if(!link.startsWith('http')) link = 'https://'+link;
+
+  var me = getMyAsesor();
+  var asesorId   = me ? me.id   : 'admin';
+  var asesorName = me ? me.name : 'Admin';
+  var today = new Date();
+  var fecha = String(today.getDate()).padStart(2,'0')+'/'+String(today.getMonth()+1).padStart(2,'0')+'/'+today.getFullYear();
+
+  if(!b.sugerencias) b.sugerencias = [];
+  b.sugerencias.push({
+    id:         Date.now(),
+    link:       link,
+    titulo:     link.length > 50 ? link.substring(0,50)+'...' : link,
+    nota:       notaEl ? notaEl.value.trim() : '',
+    asesorId:   asesorId,
+    asesorName: asesorName,
+    fecha:      fecha,
+  });
+
+  saveBusqueda(b);
+  renderBusquedas();
+}
+
+function eliminarSugerencia(bid, sid){
+  var b = busquedas.find(function(x){ return x.id===bid; }); if(!b) return;
+  b.sugerencias = (b.sugerencias||[]).filter(function(s){ return s.id !== sid; });
+  saveBusqueda(b);
+  renderBusquedas();
+}
+
+function cambiarEstadoBusqueda(bid, estado){
+  var b = busquedas.find(function(x){ return String(x.id)===String(bid); });
+  if(b){ b.estado = estado; saveBusqueda(b); renderBusquedas(); }
+}
 
 // ── BASE DE VISITAS ───────────────────────────────────────────────────────────
 
@@ -4241,32 +4597,49 @@ initAuthListener();
 // ── Save to Firestore ─────────────────────────────────────────────────────────
 // ── Individual document save functions ────────────────────────────────────────
 
+function showSaveToast(msg){
+  var ind = document.getElementById('save-indicator');
+  if(!ind) return;
+  ind.style.display = 'block';
+  ind.style.opacity = '1';
+  ind.textContent = msg || '✅ Guardado';
+  clearTimeout(ind._t);
+  ind._t = setTimeout(function(){
+    ind.style.opacity = '0';
+    setTimeout(function(){ ind.style.display = 'none'; }, 300);
+  }, 1500);
+}
+
 function saveProp(p){
   if(!currentUser || !p) return;
   window._fb.setDoc(window._fb.doc(window._fb.db,'sessa_props',String(p.id)),
     JSON.parse(JSON.stringify(p)))
-    .catch(function(e){ console.error('[Sessa] saveProp error:',e); });
+    .then(function(){ showSaveToast('✅ Guardado'); })
+    .catch(function(e){ console.error('[Sessa] saveProp error:',e); showSaveToast('❌ Error al guardar'); });
 }
 
 function saveComp(c){
   if(!currentUser || !c) return;
   window._fb.setDoc(window._fb.doc(window._fb.db,'sessa_comp',String(c.id)),
     JSON.parse(JSON.stringify(c)))
-    .catch(function(e){ console.error('[Sessa] saveComp error:',e); });
+    .then(function(){ showSaveToast('✅ Guardado'); })
+    .catch(function(e){ console.error('[Sessa] saveComp error:',e); showSaveToast('❌ Error al guardar'); });
 }
 
 function saveCap(c){
   if(!currentUser || !c) return;
   window._fb.setDoc(window._fb.doc(window._fb.db,'sessa_cap',String(c.id)),
     JSON.parse(JSON.stringify(c)))
-    .catch(function(e){ console.error('[Sessa] saveCap error:',e); });
+    .then(function(){ showSaveToast('✅ Guardado'); })
+    .catch(function(e){ console.error('[Sessa] saveCap error:',e); showSaveToast('❌ Error al guardar'); });
 }
 
 function saveAsesorDoc(a){
   if(!currentUser || !a) return;
   window._fb.setDoc(window._fb.doc(window._fb.db,'sessa_asesores',String(a.id)),
     JSON.parse(JSON.stringify(a)))
-    .catch(function(e){ console.error('[Sessa] saveAsesor error:',e); });
+    .then(function(){ showSaveToast('✅ Guardado'); })
+    .catch(function(e){ console.error('[Sessa] saveAsesor error:',e); showSaveToast('❌ Error al guardar'); });
 }
 
 function saveMeta(){
@@ -4274,6 +4647,7 @@ function saveMeta(){
   window._fb.setDoc(window._fb.doc(window._fb.db,'sessa_meta','shared'), {
     reservasLog: JSON.parse(JSON.stringify(reservasLog)),
     visitasDB:   JSON.parse(JSON.stringify(visitasDB)),
+    busquedas:   JSON.parse(JSON.stringify(busquedas)),
     metaMensual: metaMensual,
     nextId:      nextId,
     nextCid:     nextCid,
@@ -4371,13 +4745,16 @@ function startSync(){
   });
   unsubscribers.push(unsubAses);
 
-  // Metadata — reservas, visitas, meta mensual
+  // Metadata — reservas, visitas, meta mensual, busquedas
   var unsubMeta = fb.onSnapshot(fb.doc(fb.db,'sessa_meta','shared'), function(snap){
     if(!snap.exists()) return;
     var data = snap.data();
     if(data.reservasLog !== undefined) reservasLog = data.reservasLog;
     if(data.visitasDB !== undefined)   visitasDB   = data.visitasDB;
     if(data.metaMensual !== undefined) metaMensual = data.metaMensual;
+    if(data.busquedas !== undefined)   busquedas   = data.busquedas;
+    var bTab = document.getElementById('tab-busquedas');
+    if(bTab && bTab.style.display !== 'none') renderBusquedas();
   });
   unsubscribers.push(unsubMeta);
 
