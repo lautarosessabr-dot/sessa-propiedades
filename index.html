@@ -1,5 +1,4 @@
-<!DOCTYPE html>
-<html lang="es">
+lang="es">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
@@ -285,7 +284,6 @@ body.dark #dark-toggle{background:#333;border-color:#444;color:#fff;}display:inl
       </select>
       <button class="btn btn-primary" onclick="openModal('prop')">+ Nueva propiedad</button>
       <button class="btn" id="btn-tokko-import" onclick="importarDesdeTokko()" style="background:#fff;border-color:#ddd;color:#555;" title="Importar propiedades desde Tokko Broker">🔄 Importar desde Tokko</button>
-      <button id="btn-ver-todas" onclick="toggleVerTodas()" style="display:none;height:36px;padding:0 14px;font-size:12px;font-weight:600;border-radius:8px;cursor:pointer;font-family:inherit;border:1px solid #ddd;background:#fff;color:#666;white-space:nowrap;">👁 Ver todas</button>
     </div>
     <div class="legend">
       <div class="leg"><div class="leg-dot" style="background:#7F77DD;"></div>Pre-Listing</div>
@@ -440,6 +438,8 @@ function iPct(d){ return d===null?0:Math.min(100,Math.round(d/MAX*100)); }
 function saveVencAuth(pid, val){
   var p = props.find(function(x){return x.id===pid;}); if(!p) return;
   p.fechaVencAuth = val;
+  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}
+  saveToFirestore();
   renderDetail();
   renderGrid();
 }
@@ -547,6 +547,16 @@ function guardarVisita(pid){
   renderVisitasDB();
 }
 
+function savePubField(pid, val){
+  var p = props.find(function(x){return x.id===pid;}); if(!p) return;
+  p.publicacion = val;
+  if(syncTimeout){ clearTimeout(syncTimeout); syncTimeout = null; }
+  saveToFirestore();
+  // Update card badge without full re-render
+  var sel = document.getElementById('pub-sel-'+pid);
+  if(sel) sel.value = val;
+}
+
 function updatePropField(pid, fieldCode, val){
   var p = props.find(function(x){return x.id===pid;}); if(!p) return;
   var fields={1:'publicacion'};
@@ -558,6 +568,8 @@ function updatePropField(pid, fieldCode, val){
 function togglePropBool(pid, field){
   var p = props.find(function(x){return x.id===pid;}); if(!p) return;
   p[field] = p[field]==='Si' ? 'No' : 'Si';
+  if(syncTimeout){ clearTimeout(syncTimeout); syncTimeout = null; }
+  saveToFirestore();
   renderDetail();
 }
 
@@ -677,7 +689,7 @@ function isReservaComp(p){
 // ── Interacciones ─────────────────────────────────────────────────────────────
 function toggle(pid, eid, tid){
   const p = props.find(x=>x.id===pid); if(!p) return;
-  if(!canEditProp(p)){ return; } // silent block for read-only view
+
   // Track reservas when c_reserva_aceptada_vendedor is toggled on
   if(tid==='c_reserva_aceptada_vendedor'){
     var t2 = p.tasks[eid] ? p.tasks[eid].find(function(x){return x.id===tid;}) : null;
@@ -703,13 +715,16 @@ function toggle(pid, eid, tid){
   t.done = !t.done;
   if(t.special==='terminada' && t.done)  { p.finalizada=true;  p.fechaFin=toDay(); }
   if(t.special==='terminada' && !t.done) { p.finalizada=false; p.fechaFin=''; }
+  if(syncTimeout) clearTimeout(syncTimeout);
+  syncTimeout = null;
+  saveToFirestore();
   renderGrid(); renderDetail();
 }
 
 function setValor(pid, val){
   const p = props.find(x=>x.id===pid); if(!p) return;
   const t = p.tasks['cierre'].find(x=>x.id==='c_valor');
-  if(t) t.valor = val;
+  if(t){ t.valor = val; scheduleSave(); }
 }
 function setDias(pid, val){
   const p = props.find(function(x){return x.id===pid;}); if(!p) return;
@@ -719,6 +734,7 @@ function setDias(pid, val){
     t.dias = val;
     // Set the start date only once when first entering a value
     if(wasEmpty && val && val.trim() && val!=='NO') t.boletoFecha = Date.now();
+    scheduleSave();
   }
 }
 
@@ -726,6 +742,7 @@ function toggleDoc(pid, key){
   var p = props.find(function(x){return x.id===pid;}); if(!p) return;
   if(!p.docs) p.docs = {boleto:false,escritura:false,planoObra:false,planoPH:false,reglamento:false};
   p.docs[key] = !p.docs[key];
+  scheduleSave();
   // Update the button visually without full re-render
   var btn = document.getElementById('doc-'+key+'-'+pid);
   if(btn){
@@ -764,7 +781,7 @@ function saveEscribano(pid, field, val){
       cb.style.borderColor = '';
     }
   }
-  scheduleSave();
+  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;} saveToFirestore();
 }
 
 function saveDriveLink(pid, val){
@@ -793,7 +810,7 @@ function saveDriveLink(pid, val){
       renderDetail();
     }
   }
-  scheduleSave();
+  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;} saveToFirestore();
 }
 
 function updateBoletoCheck(pid){
@@ -1096,8 +1113,7 @@ function updStats(){
   if(asesorTab) asesorTab.style.display = isAdmin() ? '' : 'none';
   var statsTab = document.getElementById('tab-btn-stats');
   if(statsTab) statsTab.style.display = isAdmin() ? '' : 'none';
-  var verTodasBtn = document.getElementById('btn-ver-todas');
-  if(verTodasBtn) verTodasBtn.style.display = isAdmin() ? 'none' : 'flex';
+
 
 
   const act = props.filter(function(p){ return !p.finalizada && canViewProp(p); }).length;
@@ -1564,7 +1580,7 @@ function saveCompDrive(cid, val){
   }
   // Refresh to show/hide Open Drive button
   renderCompradorDetail();
-  scheduleSave();
+  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;} saveToFirestore();
 }
 
 function saveCompValor(cid, val){
@@ -1644,7 +1660,7 @@ function saveCompEscribano(cid, field, val){
       cb.innerHTML=''; cb.style.background=''; cb.style.borderColor='';
     }
   }
-  scheduleSave();
+  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;} saveToFirestore();
 }
 
 function setCompContactoHoy(cid){
@@ -2938,12 +2954,12 @@ function saveCaptacionField(id, fieldCode, val){
 function renderCaptaciones(){
   var el = document.getElementById('captaciones-content'); if(!el) return;
 
-  // Filter by asesor for non-admins — match by asesorId OR by email
-  var visible = isAdmin() ? captaciones : captaciones.filter(function(c){
-    var me = getMyAsesor();
+  // Admin: ve todas (solo lectura). Asesor: ve solo las suyas.
+  var me = getMyAsesor();
+  var visible = captaciones.filter(function(c){
+    if(isAdmin()) return true;
     if(!me) return false;
     if(c.asesorId && c.asesorId === me.id) return true;
-    // Also match by asesor name (for auto-created asesores)
     if(c.asesorName && me.name && c.asesorName.trim().toLowerCase() === me.name.trim().toLowerCase()) return true;
     return false;
   });
@@ -2958,7 +2974,7 @@ function renderCaptaciones(){
     '<div style="font-size:13px;font-weight:700;color:#1a1a1a;">'+activas.length+' captación'+(activas.length!==1?'es':'')+' activa'+(activas.length!==1?'s':'')+
     (cerradas.length?' <span style="color:#aaa;font-weight:400;font-size:12px;">· '+cerradas.length+' cerrada'+(cerradas.length!==1?'s':'')+'</span>':'')+
     '</div>'+
-    '<button class="btn btn-primary" onclick="openCapModal()">+ Nueva captación</button>'+
+    (!isAdmin() ? '<button class="btn btn-primary" onclick="openCapModal()">+ Nueva captación</button>' : '')+
   '</div>';
 
   // Admin search bar
@@ -3271,14 +3287,15 @@ function renderCapDetail(){
       '</div>'+
     '</div>'+
     '<div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;">'+
-      (c.estado==='activa'?
+      (!isAdmin() ? (c.estado==='activa'?
         '<button onclick="renovarCap('+c.id+')" style="height:26px;padding:0 10px;font-size:11px;font-weight:600;border:1px solid #185FA5;border-radius:8px;background:#E6F1FB;color:#0C447C;cursor:pointer;font-family:inherit;white-space:nowrap;">↺ Renovar semana</button>'+
         '<div style="display:flex;gap:4px;">'+
           '<button onclick="cerrarCap('+c.id+',2)" style="height:26px;padding:0 8px;font-size:11px;font-weight:600;border:1px solid #0F6E56;border-radius:8px;background:#E1F5EE;color:#085041;cursor:pointer;font-family:inherit;">✅ Captada</button>'+
           '<button onclick="cerrarCap('+c.id+',3)" style="height:26px;padding:0 8px;font-size:11px;font-weight:600;border:1px solid #ddd;border-radius:8px;background:#fff;color:#888;cursor:pointer;font-family:inherit;">❌ Perdida</button>'+
         '</div>'
         :'<button onclick="cerrarCap('+c.id+',1)" style="height:26px;padding:0 10px;font-size:11px;font-weight:600;border:1px solid #ddd;border-radius:8px;background:#fff;color:#666;cursor:pointer;font-family:inherit;white-space:nowrap;">↩ Reactivar</button>')+
-      '<button onclick="eliminarCap('+c.id+')" style="height:26px;padding:0 10px;font-size:11px;border:1px solid #fcc;border-radius:8px;background:#fff;color:#E24B4A;cursor:pointer;font-family:inherit;white-space:nowrap;">Eliminar</button>'+
+      '<button onclick="eliminarCap('+c.id+')" style="height:26px;padding:0 10px;font-size:11px;border:1px solid #fcc;border-radius:8px;background:#fff;color:#E24B4A;cursor:pointer;font-family:inherit;white-space:nowrap;">Eliminar</button>'
+      : '<span style="font-size:11px;color:#888;font-style:italic;">Solo lectura</span>')+
     '</div>'+
   '</div>';
 
@@ -3286,23 +3303,23 @@ function renderCapDetail(){
   h += '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;padding:12px 14px;background:#fafaf8;border:1px solid #eee;border-radius:10px;">'+
     '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'+
       '<span style="font-size:11px;color:#888;width:60px;">Teléfono</span>'+
+      (isAdmin()?'<span style="font-size:12px;color:#555;">'+c.telefono+'</span>':
       '<input type="text" value="'+c.telefono+'" placeholder="Sin teléfono" '+
       'style="flex:1;font-size:12px;padding:3px 8px;height:26px;border:1px solid #ddd;border-radius:6px;background:#fff;color:#1a1a1a;outline:none;font-family:inherit;" '+
-      'onchange="saveCaptacionField('+c.id+',1,this.value)" onclick="event.stopPropagation()"/>'+
+      'onchange="saveCaptacionField('+c.id+',1,this.value)" onclick="event.stopPropagation()"/>')+
     '</div>'+
     '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'+
       '<span style="font-size:11px;color:#888;width:60px;">Email</span>'+
+      (isAdmin()?'<span style="font-size:12px;color:#555;">'+c.mail+'</span>':
       '<input type="text" value="'+c.mail+'" placeholder="Sin email" '+
       'style="flex:1;font-size:12px;padding:3px 8px;height:26px;border:1px solid #ddd;border-radius:6px;background:#fff;color:#1a1a1a;outline:none;font-family:inherit;" '+
-      'onchange="saveCaptacionField('+c.id+',2,this.value)" onclick="event.stopPropagation()"/>'+
+      'onchange="saveCaptacionField('+c.id+',2,this.value)" onclick="event.stopPropagation()"/>')+
     '</div>'+
   '</div>';
 
   // Comentarios
   h += '<div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Plan de captación / comentarios</div>'+
-    '<textarea rows="6" style="width:100%;font-size:13px;padding:10px;border:1px solid #ddd;border-radius:10px;font-family:inherit;resize:vertical;outline:none;background:#fff;line-height:1.5;" '+
-    'placeholder="Anotá qué hay que hacer para captar esta propiedad..." '+
-    'onchange="saveCaptacionField('+c.id+',3,this.value)" onclick="event.stopPropagation()">'+c.comentarios+'</textarea>';
+    '<textarea rows="6" '+(isAdmin()?'readonly style="width:100%;font-size:13px;padding:10px;border:1px solid #eee;border-radius:10px;font-family:inherit;resize:vertical;outline:none;background:#fafaf8;line-height:1.5;color:#888;"':'style="width:100%;font-size:13px;padding:10px;border:1px solid #ddd;border-radius:10px;font-family:inherit;resize:vertical;outline:none;background:#fff;line-height:1.5;" onchange="saveCaptacionField('+c.id+',3,this.value)"')+' onclick="event.stopPropagation()">'+c.comentarios+'</textarea>';
 
   // Created at
   var createdDate = new Date(c.createdAt).toLocaleDateString('es-AR',{day:'numeric',month:'long',year:'numeric'});
@@ -3589,10 +3606,7 @@ function renderDetail(){
   // Barra de progreso
   h += '<div class="prog-bar"><div class="prog-fill" style="width:'+pc+'%;background:'+(p.finalizada?'#1D9E75':s.fill)+';"></div></div>';
 
-  // Read-only notice when viewing someone else's property
-  if(!isAdmin() && !isMyProp(p)){
-    h += '<div style="background:#FAEEDA;border:1px solid #854F0B;border-radius:10px;padding:8px 14px;margin-bottom:12px;font-size:12px;color:#633806;font-weight:600;">👁 Solo lectura — podés ver pero no modificar esta propiedad</div>';
-  }
+
 
   // Pastillas de info
   // Highlight missing telefono for Tokko imports
@@ -3605,7 +3619,10 @@ function renderDetail(){
     // Publicación editable
     '<span style="display:inline-flex;align-items:center;gap:4px;">'+
       '<span style="font-size:11px;color:#888;">Pub:</span>'+
-      '<select data-pid="'+p.id+'" onchange="updatePropField(parseInt(this.dataset.pid),1,this.value)" onclick="event.stopPropagation()" '+
+      '<select id="pub-sel-'+p.id+'" data-pid="'+p.id+'" '+
+      'onmousedown="event.stopPropagation()" '+
+      'onclick="event.stopPropagation()" '+
+      'onchange="event.stopPropagation();savePubField(parseInt(this.dataset.pid),this.value)" '+
       'style="height:24px;padding:0 6px;font-size:11px;font-weight:600;border:1px solid #ddd;border-radius:6px;background:#fff;color:#1a1a1a;outline:none;font-family:inherit;cursor:pointer;">'+
         '<option value="Simple"'+(p.publicacion==='Simple'?' selected':'')+'>Simple</option>'+
         '<option value="Destacado"'+(p.publicacion==='Destacado'?' selected':'')+'>Destacado</option>'+
@@ -4235,14 +4252,8 @@ initAuthListener();
 // ── Save to Firestore ─────────────────────────────────────────────────────────
 function saveToFirestore(){
   if(!currentUser) return;
-  // Safety: never save empty props if we had data before
-  if(props.length === 0 && _lastSavedAt > 0){
-    console.warn('[Sessa] Blocked empty save — props was non-empty before');
-    return;
-  }
   var fb = window._fb;
-  var now = Date.now();
-  _lastSavedAt = now;
+  _isSaving = true;
   // Use setDoc with merge:true so concurrent users don't fully overwrite each other
   fb.setDoc(fb.doc(fb.db,'sessa','shared'), {
     props: JSON.parse(JSON.stringify(props)),
@@ -4256,8 +4267,7 @@ function saveToFirestore(){
     nextCid: nextCid,
     nextAid: nextAid,
     nextCapId: nextCapId,
-    savedAt: now
-  }, { merge: true });
+  }, { merge: true }).then(function(){ _isSaving = false; }).catch(function(){ _isSaving = false; });
   // Private data: Mi día per user
   fb.setDoc(fb.doc(fb.db,'tareas',currentUser.uid), {
     tareasPerAsesor: JSON.parse(JSON.stringify(tareasPerAsesor))
@@ -4278,68 +4288,16 @@ function startSync(){
   var fb = window._fb;
 
   // 1. Listen to shared data (real-time)
-  var _initialLoad = true;
-  var _lastSavedAt = 0; // timestamp of our last save
+  var _isSaving = false; // true while we are writing to Firebase
 
   var unsubShared = fb.onSnapshot(fb.doc(fb.db,'sessa','shared'), function(snap){
     if(!snap.exists()) return;
+    // Skip snapshot triggered by our own save
+    if(_isSaving) return;
+
     var data = snap.data();
-
-    // On initial load: always apply remote data
-    if(_initialLoad){
-      _initialLoad = false;
-      _remoteUpdate = true;
-      if(data.props !== undefined)       { props = data.props;             nextId    = data.nextId    || nextId;   }
-      if(data.compradores !== undefined) { compradores = data.compradores; nextCid   = data.nextCid   || nextCid;  }
-      if(data.asesores !== undefined)    { asesores = data.asesores;       nextAid   = data.nextAid   || nextAid;  }
-      if(data.captaciones !== undefined) { captaciones = data.captaciones; nextCapId = data.nextCapId || nextCapId; }
-      if(data.reservasLog !== undefined) { reservasLog = data.reservasLog; }
-      if(data.visitasDB !== undefined)   { visitasDB = data.visitasDB; }
-      if(data.metaMensual !== undefined) { metaMensual = data.metaMensual; }
-      _remoteUpdate = false;
-      _renderGridOnly();
-      _renderCompradoresOnly();
-      updAsesorSel();
-      if(typeof renderAsesores === 'function') renderAsesores();
-      return;
-    }
-
-    // After initial load: only apply if remote has more or equal props
-    // AND we are not in the middle of saving
-    var remoteProps = data.props || [];
-    var remoteTime  = data.savedAt || 0;
-
-    // Skip if our local data is newer (we just saved)
-    if(remoteTime <= _lastSavedAt){
-      console.log('[Sessa] Snapshot skipped — local is newer');
-      return;
-    }
-
-    // Only apply if remote has at least as many props as local
-    if(remoteProps.length < props.length){
-      console.log('[Sessa] Snapshot skipped — remote has fewer props ('+remoteProps.length+' vs '+props.length+')');
-      return;
-    }
-
     _remoteUpdate = true;
-
-    // Smart merge: update each prop individually to preserve concurrent edits
-    if(data.props !== undefined){
-      if(data.props.length >= props.length){
-        // Remote has same or more props — use remote as base
-        // but preserve any local prop that was modified more recently
-        props = data.props;
-        nextId = data.nextId || nextId;
-      } else {
-        // Remote has fewer props — merge: add any remote props we don't have locally
-        var localIds = props.map(function(p){return p.id;});
-        data.props.forEach(function(rp){
-          if(!localIds.includes(rp.id)){
-            props.push(rp);
-          }
-        });
-      }
-    }
+    if(data.props !== undefined)       { props = data.props;             nextId    = data.nextId    || nextId;   }
     if(data.compradores !== undefined) { compradores = data.compradores; nextCid   = data.nextCid   || nextCid;  }
     if(data.asesores !== undefined)    { asesores = data.asesores;       nextAid   = data.nextAid   || nextAid;  }
     if(data.captaciones !== undefined) { captaciones = data.captaciones; nextCapId = data.nextCapId || nextCapId; }
@@ -4352,7 +4310,7 @@ function startSync(){
     _renderCompradoresOnly();
     updAsesorSel();
     if(typeof renderAsesores === 'function') renderAsesores();
-    if(activeProp) renderDetail();
+    if(activeProp) _origRenderDetail();
     if(activeComprador) renderCompradorDetail();
   });
   unsubscribers.push(unsubShared);
@@ -4379,7 +4337,11 @@ var _origRenderGrid = renderGrid;
 var _renderGridOnly = function(){ _origRenderGrid(); }; // raw, no save
 renderGrid = function(){
   _origRenderGrid();
-  if(!_remoteUpdate) scheduleSave();
+  if(!_remoteUpdate){
+    // Immediate save — no debounce to avoid race conditions
+    if(syncTimeout){ clearTimeout(syncTimeout); syncTimeout = null; }
+    saveToFirestore();
+  }
 };
 
 var _origRenderCompradores = renderCompradores;
@@ -4407,7 +4369,10 @@ renderCaptaciones = function(){
 var _origRenderDetail = renderDetail;
 renderDetail = function(){
   _origRenderDetail();
-  if(!_remoteUpdate) scheduleSave();
+  if(!_remoteUpdate){
+    if(syncTimeout){ clearTimeout(syncTimeout); syncTimeout = null; }
+    saveToFirestore();
+  }
 };
 
 var _origRenderAsesores = renderAsesores;
