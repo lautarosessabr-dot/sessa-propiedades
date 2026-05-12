@@ -640,28 +640,11 @@ function toggleVerTodas(){
   renderDetail();
 }
 
-function isMyProp(p){
-  if(isAdmin()) return true;
-  var me = getMyAsesor();
-  if(!me) return false;
-  // Match by tokkoProducerName (exact, case-insensitive)
-  var tkName = (p.tokkoProducerName||'').trim().toLowerCase();
-  var meName = me.name.trim().toLowerCase();
-  if(tkName && meName && tkName === meName) return true;
-  // Match by asesorId
-  if(p.asesorId && p.asesorId === me.id) return true;
-  return false;
-}
+function isMyProp(p){ return true; }
 
-function canViewProp(p){
-  if(isAdmin()) return true;
-  if(showAllProps) return true; // user chose to see all
-  return isMyProp(p);
-}
+function canViewProp(p){ return true; }
 
-function canEditProp(p){
-  return isMyProp(p);
-}
+function canEditProp(p){ return true; }
 
 
 
