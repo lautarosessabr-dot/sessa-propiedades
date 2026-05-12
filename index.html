@@ -9,7 +9,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
   from "https://www.gstatic.com/firebasejs/11.7.1/firebase-auth.js";
-import { getFirestore, doc, collection, setDoc, getDoc, onSnapshot, deleteDoc, query }
+import { getFirestore, doc, collection, setDoc, updateDoc, getDoc, onSnapshot, deleteDoc, query }
   from "https://www.gstatic.com/firebasejs/11.7.1/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -26,7 +26,7 @@ const auth   = getAuth(fbApp);
 const db     = getFirestore(fbApp);
 
 // Expose to window so inline script can use them
-window._fb = { auth, db, doc, collection, setDoc, getDoc, onSnapshot, deleteDoc, query,
+window._fb = { auth, db, doc, collection, setDoc, updateDoc, getDoc, onSnapshot, deleteDoc, query,
                signInWithEmailAndPassword, signOut, onAuthStateChanged };
 </script>
 <style>
@@ -2922,10 +2922,14 @@ function saveCaptacionField(id, fieldCode, val){
 function renderCaptaciones(){
   var el = document.getElementById('captaciones-content'); if(!el) return;
 
-  // Filter by asesor for non-admins
+  // Filter by asesor for non-admins — match by asesorId OR by email
   var visible = isAdmin() ? captaciones : captaciones.filter(function(c){
     var me = getMyAsesor();
-    return me && c.asesorId===me.id;
+    if(!me) return false;
+    if(c.asesorId && c.asesorId === me.id) return true;
+    // Also match by asesor name (for auto-created asesores)
+    if(c.asesorName && me.name && c.asesorName.trim().toLowerCase() === me.name.trim().toLowerCase()) return true;
+    return false;
   });
 
   var activas  = visible.filter(function(c){return c.estado==='activa';});
@@ -4211,6 +4215,7 @@ function saveToFirestore(){
   var fb = window._fb;
   var now = Date.now();
   _lastSavedAt = now;
+  // Use setDoc with merge:true so concurrent users don't fully overwrite each other
   fb.setDoc(fb.doc(fb.db,'sessa','shared'), {
     props: JSON.parse(JSON.stringify(props)),
     compradores: JSON.parse(JSON.stringify(compradores)),
@@ -4224,7 +4229,7 @@ function saveToFirestore(){
     nextAid: nextAid,
     nextCapId: nextCapId,
     savedAt: now
-  });
+  }, { merge: true });
   // Private data: Mi día per user
   fb.setDoc(fb.doc(fb.db,'tareas',currentUser.uid), {
     tareasPerAsesor: JSON.parse(JSON.stringify(tareasPerAsesor))
@@ -4289,7 +4294,24 @@ function startSync(){
     }
 
     _remoteUpdate = true;
-    if(data.props !== undefined)       { props = data.props;             nextId    = data.nextId    || nextId;   }
+
+    // Smart merge: update each prop individually to preserve concurrent edits
+    if(data.props !== undefined){
+      if(data.props.length >= props.length){
+        // Remote has same or more props — use remote as base
+        // but preserve any local prop that was modified more recently
+        props = data.props;
+        nextId = data.nextId || nextId;
+      } else {
+        // Remote has fewer props — merge: add any remote props we don't have locally
+        var localIds = props.map(function(p){return p.id;});
+        data.props.forEach(function(rp){
+          if(!localIds.includes(rp.id)){
+            props.push(rp);
+          }
+        });
+      }
+    }
     if(data.compradores !== undefined) { compradores = data.compradores; nextCid   = data.nextCid   || nextCid;  }
     if(data.asesores !== undefined)    { asesores = data.asesores;       nextAid   = data.nextAid   || nextAid;  }
     if(data.captaciones !== undefined) { captaciones = data.captaciones; nextCapId = data.nextCapId || nextCapId; }
