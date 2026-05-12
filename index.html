@@ -2816,6 +2816,9 @@ function diasRestantesCap(c){
 function renovarCap(id){
   var c = captaciones.find(function(x){return x.id===id;}); if(!c) return;
   c.createdAt = Date.now();
+  if(syncTimeout) clearTimeout(syncTimeout);
+  syncTimeout = null;
+  saveToFirestore();
   renderCaptaciones();
   renderCapDetail();
 }
@@ -2826,6 +2829,9 @@ function cerrarCap(id, estadoCode){
   var estado = estados[estadoCode] || 'activa';
   c.estado = estado;
   activeCap = null;
+  if(syncTimeout) clearTimeout(syncTimeout);
+  syncTimeout = null;
+  saveToFirestore();
   renderCaptaciones();
   renderCapDetail();
 }
@@ -2842,6 +2848,9 @@ function eliminarCap(id){
     if(c) c.estado='perdida';
     if(activeCap===id) activeCap=null;
   }
+  if(syncTimeout) clearTimeout(syncTimeout);
+  syncTimeout = null;
+  saveToFirestore();
   renderCaptaciones();
   renderCapDetail();
 }
@@ -2875,6 +2884,13 @@ function saveNewCaptacion(){
   }));
   activeCap = nid;
   closeCapModal();
+  // Save immediately — don't wait for debounce
+  if(syncTimeout) clearTimeout(syncTimeout);
+  syncTimeout = null;
+  saveToFirestore();
+  if(syncTimeout) clearTimeout(syncTimeout);
+  syncTimeout = null;
+  saveToFirestore();
   renderCaptaciones();
   renderCapDetail();
 }
