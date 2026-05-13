@@ -272,15 +272,7 @@ body.dark #dark-toggle{background:#333;border-color:#444;color:#fff;}display:inl
         <option value="">Todos los tipos</option>
         <option>Casa</option><option>Dpto</option><option>PH</option><option>Monoambiente</option><option>Lote</option><option>Galpon</option><option>Local</option>
       </select>
-      <select id="sort-props" onchange="renderGrid()" style="height:36px;padding:0 10px;font-size:13px;border:1px solid #ddd;border-radius:8px;background:#fff;color:#1a1a1a;outline:none;font-family:inherit;">
-        <option value="default">Orden: Carga</option>
-        <option value="inac-desc">Más inactivas</option>
-        <option value="inac-asc">Menos inactivas</option>
-        <option value="etapa">Por etapa</option>
-        <option value="precio-desc">Mayor precio</option>
-        <option value="precio-asc">Menor precio</option>
-      </select>
-      <select id="filt-asesor" onchange="renderGrid()" style="height:36px;padding:0 10px;font-size:12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);outline:none;font-family:inherit;">
+      <select id="filt-asesor" onchange="renderGrid()" style="height:36px;padding:0 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);outline:none;font-family:inherit;">
         <option value="">Todos los asesores</option>
       </select>
       <button class="btn btn-primary" onclick="openModal('prop')">+ Nueva propiedad</button>
