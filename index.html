@@ -1834,24 +1834,30 @@ function renderGrid(){
 }
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
-function setTab(tab, el){
-  document.querySelectorAll('.tab').forEach(function(t){t.classList.remove('active');});
-  el.classList.add('active');
-  document.getElementById('tab-props').style.display        = tab==='props'       ? '' : 'none';
-  document.getElementById('tab-compradores').style.display  = tab==='compradores' ? '' : 'none';
-  document.getElementById('tab-tareas').style.display       = tab==='tareas'      ? '' : 'none';
-  document.getElementById('tab-asesores').style.display     = tab==='asesores'    ? '' : 'none';
-  document.getElementById('tab-stats').style.display        = tab==='stats'       ? '' : 'none';
-  if(tab==='asesores')    renderAsesores();
-  if(tab==='compradores') renderCompradores();
-  if(tab==='tareas')      renderTareas();
-  if(tab==='stats')       renderStats();
-  if(tab==='captaciones')  renderCaptaciones();
-  if(tab==='visitasdb')    renderVisitasDB();
-  if(tab==='busquedas')    renderBusquedas();
-  document.getElementById('tab-captaciones').style.display = tab==='captaciones' ? '' : 'none';
-  document.getElementById('tab-visitasdb').style.display   = tab==='visitasdb'   ? '' : 'none';
-  document.getElementById('tab-busquedas').style.display   = tab==='busquedas'   ? '' : 'none';
+function setTab(tab, btn){
+  // Update nav active state
+  document.querySelectorAll('.nav-item, .tab').forEach(function(b){ b.classList.remove('active'); });
+  if(btn) btn.classList.add('active');
+
+  // Hide ALL tabs first
+  ['props','compradores','tareas','asesores','stats','captaciones','visitasdb','busquedas','ia'].forEach(function(t){
+    var el = document.getElementById('tab-'+t);
+    if(el) el.style.display = 'none';
+  });
+
+  // Show selected tab
+  var target = document.getElementById('tab-'+tab);
+  if(target) target.style.display = '';
+
+  // Render content
+  if(tab==='asesores'    && typeof renderAsesores==='function')    renderAsesores();
+  if(tab==='compradores' && typeof renderCompradores==='function'){ renderCompradores(); renderCompradorDetail(); }
+  if(tab==='tareas'      && typeof renderTareas==='function')      renderTareas();
+  if(tab==='stats'       && typeof renderStats==='function')       renderStats();
+  if(tab==='captaciones' && typeof renderCaptaciones==='function') renderCaptaciones();
+  if(tab==='visitasdb'   && typeof renderVisitasDB==='function')   renderVisitasDB();
+  if(tab==='busquedas'   && typeof renderBusquedas==='function')   renderBusquedas();
+  if(tab==='ia'          && typeof renderIA==='function')          renderIA();
 }
 
 // ── Modales ───────────────────────────────────────────────────────────────────
