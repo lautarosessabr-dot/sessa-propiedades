@@ -390,6 +390,10 @@ body.dark #dark-toggle{background:#333;border-color:#444;color:#fff;}display:inl
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><polyline points="3 6 4 7 6 5"/><polyline points="3 12 4 13 6 11"/><polyline points="3 18 4 19 6 17"/></svg>
           <span>Mi día</span>
         </button>
+        <button class="nav-item" onclick="setTab('ia',this)" data-tab="ia">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a4 4 0 0 1 4 4c0 1.5-.8 2.8-2 3.5V12h2a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2h-1v2h-6v-2H8a2 2 0 0 1-2-2v-2a2 2 0 0 1 2-2h2V9.5C8.8 8.8 8 7.5 8 6a4 4 0 0 1 4-4z"/></svg>
+          <span>Asistente IA</span>
+        </button>
       </nav>
 
       <div class="sidebar-footer" id="user-pill" style="display:none;">
@@ -460,6 +464,10 @@ body.dark #dark-toggle{background:#333;border-color:#444;color:#fff;}display:inl
     <div id="visitasdb-content"></div>
   </div>
 
+  <div id="tab-ia" style="display:none;">
+    <div id="ia-content"></div>
+  </div>
+
   <div id="tab-tareas" style="display:none;">
     <div id="tareas-content"></div>
   </div>
@@ -496,10 +504,9 @@ const ETAPAS = [
   { id:'mkt', label:'2. Producción y Marketing', bg:'#E6F1FB', border:'#185FA5', text:'#0C447C', fill:'#378ADD',
     tasks:[
       {id:'mkt_1', t:'Producción audiovisual y gráfica: fotos, video y material para redes (focal360 / Lau)'},
-      {id:'mkt_2', t:'', special:'mkt_descripcion'},
-      {id:'mkt_3', t:'Publicar en todos los canales (inmovar, tokko, marketplace, instagram)'},
-      {id:'mkt_4', t:'', special:'meta_pauta'},
-      {id:'mkt_5', t:'Enviar link al propietario para revisión'}
+      {id:'mkt_2', t:'Publicar en todos los canales (inmovar, tokko, marketplace, instagram)'},
+      {id:'mkt_3', t:'', special:'meta_pauta'},
+      {id:'mkt_4', t:'Enviar link al propietario para revisión'}
     ]},
   { id:'seg', label:'3. Seguimiento y Comunicación', bg:'#FAEEDA', border:'#854F0B', text:'#633806', fill:'#EF9F27',
     tasks:[
@@ -4460,6 +4467,165 @@ function eliminarSugerencia(bid, sid){
 function cambiarEstadoBusqueda(bid, estado){
   var b = busquedas.find(function(x){ return String(x.id)===String(bid); });
   if(b){ b.estado = estado; saveBusqueda(b); renderBusquedas(); }
+}
+
+
+// ── ASISTENTE IA ──────────────────────────────────────────────────────────────
+
+function renderIA(){
+  var el = document.getElementById('ia-content'); if(!el) return;
+  el.innerHTML =
+    '<div style="max-width:780px;">'+
+      '<div style="margin-bottom:24px;">'+
+        '<h2 style="font-size:20px;font-weight:700;color:var(--text);margin-bottom:6px;">✨ Asistente IA</h2>'+
+        '<p style="font-size:13px;color:var(--text3);">Herramientas de inteligencia artificial para Sessa Propiedades.</p>'+
+      '</div>'+
+
+      // Tool cards
+      '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-bottom:28px;">'+
+        '<div onclick="abrirHerramientaIA(&quot;descripcion&quot;)" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;cursor:pointer;transition:all .15s;" onmouseover="this.style.borderColor=&quot;var(--accent)&quot;" onmouseout="this.style.borderColor=&quot;var(--border)&quot;">'+
+          '<div style="font-size:28px;margin-bottom:10px;">📝</div>'+
+          '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;">Mejorar descripción</div>'+
+          '<div style="font-size:12px;color:var(--text3);">Pegá una descripción y la IA la mejora para portales y redes.</div>'+
+        '</div>'+
+        '<div onclick="abrirHerramientaIA(&quot;whatsapp&quot;)" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;cursor:pointer;transition:all .15s;" onmouseover="this.style.borderColor=&quot;var(--accent)&quot;" onmouseout="this.style.borderColor=&quot;var(--border)&quot;">'+
+          '<div style="font-size:28px;margin-bottom:10px;">📲</div>'+
+          '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;">Mensaje WhatsApp</div>'+
+          '<div style="font-size:12px;color:var(--text3);">Generá un mensaje profesional para enviarle al propietario o cliente.</div>'+
+        '</div>'+
+        '<div onclick="abrirHerramientaIA(&quot;respuesta&quot;)" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;cursor:pointer;transition:all .15s;" onmouseover="this.style.borderColor=&quot;var(--accent)&quot;" onmouseout="this.style.borderColor=&quot;var(--border)&quot;">'+
+          '<div style="font-size:28px;margin-bottom:10px;">💬</div>'+
+          '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;">Responder consulta</div>'+
+          '<div style="font-size:12px;color:var(--text3);">Pegá una consulta recibida y la IA te sugiere cómo responder.</div>'+
+        '</div>'+
+      '</div>'+
+
+      // Active tool area
+      '<div id="ia-tool-area"></div>'+
+    '</div>';
+}
+
+function abrirHerramientaIA(tool){
+  var el = document.getElementById('ia-tool-area'); if(!el) return;
+
+  var prompts = {
+    descripcion: {
+      title: '📝 Mejorar descripción',
+      placeholder: 'Pegá acá la descripción actual de la propiedad...',
+      system: 'Sos un experto en marketing inmobiliario argentino. Mejorar la descripción de la propiedad que te den para que sea más atractiva, profesional y efectiva para portales inmobiliarios y redes sociales. Mantené los datos reales. Usá un tono cálido y profesional. Máximo 150 palabras. Escribí en español argentino.',
+      btn: '✨ Mejorar descripción'
+    },
+    whatsapp: {
+      title: '📲 Mensaje WhatsApp',
+      placeholder: 'Describí brevemente qué querés comunicar (ej: recordarle al propietario sobre la visita del jueves, precio de la propiedad, estado de la venta)...',
+      system: 'Sos un asesor inmobiliario profesional argentino de Sessa Propiedades. Redactá un mensaje de WhatsApp breve, cálido y profesional según lo que te indiquen. Sin emojis excesivos. En español argentino. Máximo 80 palabras.',
+      btn: '✨ Generar mensaje'
+    },
+    respuesta: {
+      title: '💬 Responder consulta',
+      placeholder: 'Pegá acá la consulta que recibiste (por WhatsApp, Zonaprop, etc.)...',
+      system: 'Sos un asesor inmobiliario profesional argentino de Sessa Propiedades. Redactá una respuesta profesional, amable y concisa a la consulta que te den. En español argentino. Máximo 80 palabras.',
+      btn: '✨ Generar respuesta'
+    }
+  };
+
+  var p = prompts[tool];
+  window._iaTool = tool;
+  window._iaPrompts = prompts;
+
+  var wrap = document.createElement('div');
+  wrap.style.cssText = 'background:var(--surface);border:1px solid var(--accent);border-radius:var(--radius);padding:20px;';
+
+  var title = document.createElement('div');
+  title.style.cssText = 'font-size:15px;font-weight:700;color:var(--text);margin-bottom:14px;';
+  title.textContent = p.title;
+  wrap.appendChild(title);
+
+  var ta = document.createElement('textarea');
+  ta.id = 'ia-input'; ta.rows = 5; ta.placeholder = p.placeholder;
+  ta.style.cssText = 'width:100%;font-size:13px;padding:10px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface2);color:var(--text);outline:none;font-family:inherit;resize:vertical;line-height:1.5;margin-bottom:10px;box-sizing:border-box;';
+  wrap.appendChild(ta);
+
+  var btns = document.createElement('div');
+  btns.style.cssText = 'display:flex;gap:8px;align-items:center;margin-bottom:14px;';
+
+  var runBtn = document.createElement('button');
+  runBtn.id = 'ia-btn'; runBtn.textContent = p.btn;
+  runBtn.style.cssText = 'height:36px;padding:0 20px;font-size:13px;font-weight:700;border:none;border-radius:var(--radius-sm);background:var(--accent);color:#fff;cursor:pointer;font-family:inherit;';
+  runBtn.onclick = function(){ llamarIA(window._iaTool); };
+  btns.appendChild(runBtn);
+
+  var cancelBtn = document.createElement('button');
+  cancelBtn.textContent = 'Cancelar';
+  cancelBtn.style.cssText = 'height:36px;padding:0 14px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text2);cursor:pointer;font-family:inherit;';
+  cancelBtn.onclick = function(){ document.getElementById('ia-tool-area').innerHTML=''; };
+  btns.appendChild(cancelBtn);
+  wrap.appendChild(btns);
+
+  var out = document.createElement('div');
+  out.id = 'ia-output'; out.style.display = 'none';
+  wrap.appendChild(out);
+
+  el.innerHTML = '';
+  el.appendChild(wrap);
+  setTimeout(function(){ ta.focus(); }, 100);
+}
+
+async function llamarIA(tool){
+  var inp = document.getElementById('ia-input');
+  var btn = document.getElementById('ia-btn');
+  var out = document.getElementById('ia-output');
+  if(!inp||!btn||!out) return;
+  var texto = inp.value.trim();
+  if(!texto){ inp.focus(); return; }
+
+  btn.textContent = '⏳ Generando...'; btn.disabled = true;
+  out.style.display = 'none';
+
+  var prompts = window._iaPrompts;
+  var p = prompts[tool];
+
+  try {
+    var resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        system: p.system,
+        messages: [{ role: 'user', content: texto }]
+      })
+    });
+    var data = await resp.json();
+    var result = data.content && data.content[0] && data.content[0].text ? data.content[0].text : '(Sin respuesta)';
+
+    out.style.display = 'block';
+    out.innerHTML =
+      '<div style="border-top:1px solid var(--border2);padding-top:14px;">'+
+        '<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">Resultado</div>'+
+        '<div id="ia-result-text" style="font-size:13px;color:var(--text);line-height:1.6;white-space:pre-wrap;background:var(--surface2);padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);">'+result+'</div>'+
+        '<div style="display:flex;gap:8px;margin-top:10px;">'+
+          '<button onclick="copiarResultadoIA()" style="height:32px;padding:0 14px;font-size:12px;font-weight:600;border:1px solid var(--accent);border-radius:var(--radius-sm);background:var(--accent-bg);color:var(--accent);cursor:pointer;font-family:inherit;">📋 Copiar</button>'+
+          '<button onclick="llamarIA(window._iaTool)" style="height:32px;padding:0 14px;font-size:12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text2);cursor:pointer;font-family:inherit;">🔄 Regenerar</button>'+
+        '</div>'+
+      '</div>';
+
+    btn.textContent = p.btn; btn.disabled = false;
+  } catch(e) {
+    btn.textContent = p.btn; btn.disabled = false;
+    out.style.display = 'block';
+    out.innerHTML = '<div style="color:#A32D2D;font-size:13px;padding:10px;">Error al conectar con la IA: '+e.message+'</div>';
+  }
+}
+
+function copiarResultadoIA(){
+  var el = document.getElementById('ia-result-text');
+  if(!el) return;
+  navigator.clipboard.writeText(el.textContent).then(function(){
+    showSaveToast('📋 Copiado al portapapeles');
+  }).catch(function(){
+    prompt('Copiá el texto:', el.textContent);
+  });
 }
 
 // ── BASE DE VISITAS ───────────────────────────────────────────────────────────
