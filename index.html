@@ -3562,6 +3562,67 @@ function exportarBackupExcel(){
   wsAses['!cols'] = [{wch:20},{wch:30},{wch:18},{wch:18}];
   XLSX.utils.book_append_sheet(wb, wsAses, 'Asesores');
 
+  // ── Hoja 5: Notas del equipo (comentarios por propiedad) ────────────────────
+  var notasData = [['Propiedad','Asesor autor','Nota','Fecha']];
+  props.forEach(function(p){
+    if(!p.comentarios||!p.comentarios.length) return;
+    p.comentarios.forEach(function(c){
+      notasData.push([p.addr, c.asesorName||'', c.texto||'', c.fecha||'']);
+    });
+  });
+  if(notasData.length>1){
+    var wsNotas = XLSX.utils.aoa_to_sheet(notasData);
+    wsNotas['!cols'] = [{wch:28},{wch:16},{wch:50},{wch:16}];
+    XLSX.utils.book_append_sheet(wb, wsNotas, 'Notas equipo');
+  }
+
+  // ── Hoja 6: Visitas ───────────────────────────────────────────────────────
+  var visData = [['Nombre visitante','Teléfono','Resultado','Nota','Fecha visita','Propiedad','Tipo','Precio','Asesor']];
+  props.forEach(function(p){
+    if(!p.visitas||!p.visitas.length) return;
+    p.visitas.forEach(function(v){
+      var resLabel = v.resultado==='interesado'?'Muy interesado':v.resultado==='dudoso'?'Dudoso':'Descartado';
+      visData.push([v.nombre||'',v.telefono||'',resLabel,v.nota||'',v.fecha||'',p.addr,p.tipo||'',p.precio||'',p.tokkoProducerName||getA(p.asesorId).name]);
+    });
+  });
+  // Also from visitasDB
+  visitasDB.forEach(function(v){
+    var already = visData.find(function(r){ return r[0]===v.nombre&&r[4]===v.fecha&&r[5]===v.propAddr; });
+    if(!already){
+      var resLabel = v.resultado==='interesado'?'Muy interesado':v.resultado==='dudoso'?'Dudoso':'Descartado';
+      visData.push([v.nombre||'',v.telefono||'',resLabel,v.nota||'',v.fecha||'',v.propAddr||'',v.propTipo||'',v.propPrecio||'',v.asesorName||'']);
+    }
+  });
+  if(visData.length>1){
+    var wsVis = XLSX.utils.aoa_to_sheet(visData);
+    wsVis['!cols'] = [{wch:20},{wch:14},{wch:14},{wch:30},{wch:12},{wch:28},{wch:10},{wch:14},{wch:16}];
+    XLSX.utils.book_append_sheet(wb, wsVis, 'Visitas');
+  }
+
+  // ── Hoja 7: Búsquedas activas ─────────────────────────────────────────────
+  var bqData = [['Cliente','Teléfono','Estado','Asesor','Fecha','Texto búsqueda','Sugerencias']];
+  busquedas.forEach(function(b){
+    var a = asesores.find(function(x){return x.id===b.asesorId;})||{name:b.asesorName||'—'};
+    var sugs = (b.sugerencias||[]).map(function(s){ return s.link+(s.nota?' ('+s.nota+')':''); }).join(' | ');
+    bqData.push([b.nombre||'',b.telefono||'',b.estado||'',a.name,b.fecha||'',b.texto||'',sugs]);
+  });
+  if(bqData.length>1){
+    var wsBq = XLSX.utils.aoa_to_sheet(bqData);
+    wsBq['!cols'] = [{wch:20},{wch:14},{wch:10},{wch:16},{wch:12},{wch:40},{wch:50}];
+    XLSX.utils.book_append_sheet(wb, wsBq, 'Busquedas activas');
+  }
+
+  // ── Hoja 8: Reservas ──────────────────────────────────────────────────────
+  if(reservasLog.length){
+    var resData = [['Propiedad','Asesor','Fecha','Estado','Mes']];
+    reservasLog.forEach(function(r){
+      resData.push([r.propAddr||'',r.asesorName||'',r.fecha||'',r.estado||'',r.mes||'']);
+    });
+    var wsRes = XLSX.utils.aoa_to_sheet(resData);
+    wsRes['!cols'] = [{wch:28},{wch:16},{wch:12},{wch:14},{wch:10}];
+    XLSX.utils.book_append_sheet(wb, wsRes, 'Reservas');
+  }
+
   // ── Descargar ──────────────────────────────────────────────────────────────
   XLSX.writeFile(wb, 'Sessa_Backup_'+fecha+'.xlsx');
 }
