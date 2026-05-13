@@ -410,6 +410,7 @@ body.dark #dark-toggle{background:#333;border-color:#444;color:#fff;}display:inl
       </select>
       <button class="btn btn-primary" onclick="openModal('prop')">+ Nueva propiedad</button>
       <button class="btn" id="btn-tokko-import" onclick="importarDesdeTokko()" style="background:#fff;border-color:#ddd;color:#555;" title="Importar propiedades desde Tokko Broker">🔄 Importar desde Tokko</button>
+      <button class="btn" onclick="sincronizarPreciosTokko()" style="background:#fff;border-color:#EF9F27;color:#854F0B;" title="Verificar cambios de precio en Tokko">💰 Sincronizar precios</button>
     </div>
     <div class="legend">
       <div class="leg"><div class="leg-dot" style="background:#7F77DD;"></div>Pre-Listing</div>
@@ -529,7 +530,7 @@ function mkProp(id, d){
     aptoBanco:d.aptoBanco||false, cartel:d.cartel||false,
     publicacion:d.publicacion||'Simple', observaciones:d.observaciones||'',
     ingreso:d.ingreso||'', ult:d.ult||'',
-    tasks, lastOpen:Date.now(), finalizada:false, fechaFin:'', lastContacto:'', visitas:[], fechaVencAuth:'', fotosDrive:'', docs:{boleto:false,escritura:false,planoObra:false,planoPH:false,reglamento:false}
+    tasks, lastOpen:Date.now(), finalizada:false, fechaFin:'', lastContacto:'', visitas:[], fechaVencAuth:'', fotosDrive:'', comentarios:[], docs:{boleto:false,escritura:false,planoObra:false,planoPH:false,reglamento:false}
   };
 }
 
@@ -698,6 +699,195 @@ function guardadoManual(pid){
       setTimeout(function(){ ind.style.display = 'none'; }, 300);
     }, 2000);
   }
+}
+
+async function sincronizarPreciosTokko(){
+  var btn = event.target;
+  btn.textContent = '⏳ Verificando...'; btn.disabled = true;
+  var TOKKO_KEY = 'a816281c7b5e042cf4b63ce93dae3b4ff5817c7e';
+  try {
+    var resp = await fetch('https://www.tokkobroker.com/api/v1/property/?key='+TOKKO_KEY+'&format=json&limit=200&lang=es_ar&current_status=2');
+    var data = await resp.json();
+    var tokkoItems = data.objects || [];
+    var cambios = [];
+    props.forEach(function(p){
+      if(!p.tokkoId) return;
+      var tk = tokkoItems.find(function(t){ return String(t.id)===String(p.tokkoId); });
+      if(!tk) return;
+      var tkOps = tk.operations && tk.operations[0];
+      if(!tkOps) return;
+      var tkPrice = tkOps.prices && tkOps.prices[0];
+      if(!tkPrice) return;
+      var tkPrecioStr = (tkPrice.currency==='USD'?'USD ':'$')+Number(tkPrice.price).toLocaleString('es-AR');
+      if(tkPrecioStr !== p.precio){
+        cambios.push({ prop: p, anterior: p.precio, nuevo: tkPrecioStr });
+      }
+    });
+    btn.textContent = '💰 Sincronizar precios'; btn.disabled = false;
+    if(!cambios.length){
+      showSaveToast('✅ Todos los precios están actualizados');
+      return;
+    }
+    // Show changes modal
+    var overlay = document.createElement('div');
+    overlay.className = 'resumen-overlay';
+    overlay.onclick = function(e){ if(e.target===overlay) overlay.remove(); };
+    var rows = cambios.map(function(c){
+      return '<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:#FAEEDA;border-radius:8px;margin-bottom:6px;">'+
+        '<div style="flex:1;font-size:13px;font-weight:600;">'+c.prop.addr+'</div>'+
+        '<div style="font-size:12px;color:#888;text-decoration:line-through;">'+c.anterior+'</div>'+
+        '<span style="color:#854F0B;">→</span>'+
+        '<div style="font-size:12px;font-weight:700;color:#633806;">'+c.nuevo+'</div>'+
+        '<button data-idx="'+cambios.indexOf(c)+'" onclick="aplicarCambioPrecio(this.dataset.idx,this)" '+
+        'style="height:26px;padding:0 10px;font-size:11px;font-weight:600;border:1px solid #0F6E56;border-radius:6px;background:#E1F5EE;color:#085041;cursor:pointer;font-family:inherit;">Actualizar</button>'+
+      '</div>';
+    }).join('');
+    overlay.innerHTML =
+      '<div class="resumen-modal" style="max-width:520px;">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">'+
+          '<h3 style="font-size:15px;font-weight:700;">💰 Cambios de precio en Tokko ('+cambios.length+')</h3>'+
+          '<button onclick="closeExportModal(this)" style="background:none;border:none;font-size:20px;cursor:pointer;color:#888;">×</button>'+
+        '</div>'+
+        '<div id="precio-cambios-list">'+rows+'</div>'+
+        '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid #eee;">'+
+          '<button onclick="closeExportModal(this)" style="height:34px;padding:0 16px;font-size:12px;border:1px solid #ddd;border-radius:8px;background:#fff;cursor:pointer;font-family:inherit;">Cerrar</button>'+
+          '<button onclick="aplicarTodosCambios()" style="height:34px;padding:0 16px;font-size:12px;font-weight:700;border:none;border-radius:8px;background:#185FA5;color:#fff;cursor:pointer;font-family:inherit;">Actualizar todos</button>'+
+        '</div>'+
+      '</div>';
+    window._precioCambios = cambios;
+    document.body.appendChild(overlay);
+  } catch(e) {
+    btn.textContent = '💰 Sincronizar precios'; btn.disabled = false;
+    alert('Error al conectar con Tokko: '+e.message);
+  }
+}
+
+function aplicarCambioPrecio(idx, btn){
+  var cambios = window._precioCambios;
+  var c = cambios[parseInt(idx)];
+  if(!c) return;
+  c.prop.precio = c.nuevo;
+  saveProp(c.prop);
+  var row = btn.closest('div[style*="FAEEDA"]');
+  if(row){ row.style.background='#E1F5EE'; row.style.opacity='.6'; btn.textContent='✅'; btn.disabled=true; }
+  renderGrid();
+  showSaveToast('✅ Precio actualizado');
+}
+
+function aplicarTodosCambios(){
+  var cambios = window._precioCambios;
+  if(!cambios) return;
+  cambios.forEach(function(c){
+    c.prop.precio = c.nuevo;
+    saveProp(c.prop);
+  });
+  renderGrid();
+  document.querySelector('.resumen-overlay').remove();
+  showSaveToast('✅ '+cambios.length+' precios actualizados');
+}
+
+function injectInactivityTasks(){
+  // For each prop inactive 10+ days that belongs to current user, add reminder task if not already there
+  var me = getMyAsesor();
+  var myProps = props.filter(function(p){
+    if(p.finalizada) return false;
+    var d = diasSinContacto(p); if(d===null || d<10) return false;
+    // Is this prop mine?
+    var tkName = (p.tokkoProducerName||'').trim().toLowerCase();
+    var meName = me ? me.name.trim().toLowerCase() : '';
+    return isAdmin() || (meName && tkName===meName) || (me && p.asesorId===me.id);
+  });
+
+  if(!myProps.length) return;
+
+  var key = me ? me.name : 'admin';
+  if(!tareasPerAsesor[key]) tareasPerAsesor[key] = { lastReset: toDay(), tasks: getDefaultTasks() };
+  var state = tareasPerAsesor[key];
+
+  var changed = false;
+  myProps.forEach(function(p){
+    var taskId = 'inac-'+p.id;
+    var exists = state.tasks.find(function(t){ return t.id===taskId; });
+    if(!exists){
+      var d = diasSinContacto(p);
+      state.tasks.push({
+        id: taskId,
+        text: 'Contactar propietario de '+p.addr+' ('+d+' días sin contacto)',
+        cat: 'Clientes',
+        done: false,
+        auto: true
+      });
+      changed = true;
+    }
+  });
+
+  // Remove auto tasks for props that are no longer inactive
+  state.tasks = state.tasks.filter(function(t){
+    if(!t.auto) return true;
+    var pid = t.id.replace('inac-','');
+    var p = props.find(function(x){ return String(x.id)===pid; });
+    if(!p) return false; // prop deleted
+    var d = diasSinContacto(p);
+    return d!==null && d>=10 && !p.finalizada;
+  });
+
+  if(changed) saveMiDia();
+  var tabEl = document.getElementById('tab-tareas');
+  if(tabEl && tabEl.style.display !== 'none') renderTareas();
+}
+
+function generarDescripcionPlantilla(pid){
+  var p = props.find(function(x){return x.id===pid;}); if(!p) return;
+  var obs = p.observaciones || '';
+  var dormsM = obs.match(/([0-9]+)\s*dorm/i);
+  var banosM = obs.match(/([0-9]+)\s*ba/i);
+  var ambM   = obs.match(/([0-9]+)\s*amb/i);
+  var barrioM = obs.match(/barrio[: ]+([^.]+)/i);
+  var expM = obs.match(/expensas[: $]*([0-9.,]+)/i);
+  var aptoBanco = p.aptoBanco ? 'Apto banco.' : '';
+  var excl = '';
+  var autoTask = p.tasks&&p.tasks.pre ? p.tasks.pre.find(function(x){return x.id==='pre_2';}) : null;
+  if(autoTask&&autoTask.autoVal==='exclusiva') excl = 'Propiedad en exclusiva.';
+  var lines = [];
+  lines.push((p.tipo||'Propiedad') + ' en venta' + (barrioM?' en '+barrioM[1].trim():'') + '.');
+  lines.push('');
+  if(dormsM) lines.push('Dormitorios: ' + dormsM[1]);
+  if(ambM&&!dormsM) lines.push('Ambientes: ' + ambM[1]);
+  if(banosM) lines.push('Banos: ' + banosM[1]);
+  if(p.precio) lines.push('Precio: ' + p.precio);
+  if(expM) lines.push('Expensas: $' + expM[1]);
+  lines.push('');
+  if(aptoBanco) lines.push(aptoBanco);
+  if(excl) lines.push(excl);
+  if(obs) lines.push('Zona: ' + obs.split('.')[0].trim());
+  lines.push('');
+  lines.push('Mas informacion: Sessa Propiedades');
+  var desc = lines.join('\n');
+  var ta = document.getElementById('mkt-desc-'+pid);
+  if(ta){ ta.value = desc; guardarDescripcion(pid, desc); }
+  else {
+    var t = p.tasks&&p.tasks.mkt ? p.tasks.mkt.find(function(x){return x.id==='mkt_descripcion';}) : null;
+    if(t){ t.texto = desc; saveProp(p); renderDetail(); }
+  }
+  showSaveToast('Descripcion generada');
+}
+function agregarComentario(pid){
+  var p = props.find(function(x){return x.id===pid;}); if(!p) return;
+  var inp = document.getElementById('com-inp-'+pid);
+  if(!inp) return;
+  var texto = inp.value.trim();
+  if(!texto) return;
+  var me = getMyAsesor();
+  var asesorName = me ? me.name : (isAdmin() ? 'Admin' : currentUserEmail.split('@')[0]);
+  var asesorId   = me ? me.id   : 'admin';
+  var today = new Date();
+  var fecha = String(today.getDate()).padStart(2,'0')+'/'+String(today.getMonth()+1).padStart(2,'0')+'/'+today.getFullYear()+
+    ' '+String(today.getHours()).padStart(2,'0')+':'+String(today.getMinutes()).padStart(2,'0');
+  if(!p.comentarios) p.comentarios = [];
+  p.comentarios.push({ id:Date.now(), texto:texto, asesorId:asesorId, asesorName:asesorName, fecha:fecha });
+  inp.value = '';
+  saveProp(p);
+  renderDetail();
 }
 
 function saveFotosDrive(pid, val){
@@ -2024,7 +2214,7 @@ function renderCompradorDetail(){
         : '')+
         '<input type="text" placeholder="📷 Link carpeta de fotos" value="'+p.fotosDrive+'" '+
         'id="fotos-inp-'+p.id+'" '+
-        'style="height:28px;padding:0 8px;font-size:11px;border:1px solid #ddd;border-radius:8px;background:#fff;color:#1a1a1a;outline:none;width:'+(p.fotosDrive?'0px;opacity:0;margin:0;padding:0;':'130px;')+'font-family:inherit;transition:width .2s;" '+
+        'style="height:28px;padding:0 8px;font-size:11px;border:1px solid #ddd;border-radius:8px;background:#fff;color:#1a1a1a;outline:none;width:'+(p.fotosDrive?'0px;opacity:0;margin:0;padding:0;':'150px;')+'font-family:inherit;transition:width .2s;" '+
         'onfocus="this.style.width=\'160px\';this.style.opacity=\'1\'" '+
         'onblur="if(!this.value)this.style.width=\'130px\'" '+
         'onchange="saveFotosDrive('+p.id+',this.value)" '+
@@ -4045,6 +4235,37 @@ function renderDetail(){
         : '<div style="font-size:12px;color:#bbb;text-align:center;padding:12px;">Sin visitas registradas</div>')+
       '</div>'+
 
+      // Comentarios internos
+      '<div style="margin-top:14px;border-top:1px solid var(--border2);padding-top:12px;" onclick="event.stopPropagation()">'+
+        '<div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">'+
+          '💬 Notas del equipo ('+(p.comentarios?p.comentarios.length:0)+')'+
+        '</div>'+
+        // Existing comments
+        ((p.comentarios&&p.comentarios.length) ?
+          '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px;max-height:180px;overflow-y:auto;">'+
+          p.comentarios.slice().reverse().map(function(c){
+            var me = getMyAsesor();
+            var isMe = me && me.id===c.asesorId;
+            return '<div style="padding:8px 10px;border-radius:8px;background:'+(isMe?'#E6F1FB':'var(--surface2)')+';border:1px solid '+(isMe?'#B5D4F4':'var(--border2)')+'">'+
+              '<div style="font-size:12px;color:#1a1a1a;line-height:1.4;">'+c.texto+'</div>'+
+              '<div style="font-size:10px;color:#aaa;margin-top:4px;display:flex;justify-content:space-between;">'+
+                '<span style="font-weight:600;color:'+(isMe?'#185FA5':'#666')+';">'+c.asesorName+'</span>'+
+                '<span>'+c.fecha+'</span>'+
+              '</div>'+
+            '</div>';
+          }).join('')+
+          '</div>'
+        : '')+
+        // Input row
+        '<div style="display:flex;gap:6px;align-items:flex-end;">'+
+          '<textarea id="com-inp-'+p.id+'" rows="2" placeholder="Escribí una nota para el equipo..." '+
+          'style="flex:1;font-size:12px;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);outline:none;font-family:inherit;resize:none;line-height:1.4;" '+
+          'onclick="event.stopPropagation()"></textarea>'+
+          '<button data-pid="'+p.id+'" onclick="event.stopPropagation();agregarComentario(parseInt(this.dataset.pid))" '+
+          'style="height:34px;padding:0 12px;font-size:12px;font-weight:600;border:none;border-radius:8px;background:#185FA5;color:#fff;cursor:pointer;font-family:inherit;white-space:nowrap;">Enviar</button>'+
+        '</div>'+
+      '</div>'+
+
       // Doc checks row
       '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;" onclick="event.stopPropagation()">'+
         ['boleto','escritura','planoObra','planoPH','reglamento'].map(function(key){
@@ -4078,7 +4299,7 @@ function renderDetail(){
         : '')+
         '<input type="text" placeholder="📷 Link carpeta de fotos" value="'+p.fotosDrive+'" '+
         'id="fotos-inp-'+p.id+'" '+
-        'style="height:28px;padding:0 8px;font-size:11px;border:1px solid #ddd;border-radius:8px;background:#fff;color:#1a1a1a;outline:none;width:'+(p.fotosDrive?'0px;opacity:0;margin:0;padding:0;':'130px;')+'font-family:inherit;transition:width .2s;" '+
+        'style="height:28px;padding:0 8px;font-size:11px;border:1px solid #ddd;border-radius:8px;background:#fff;color:#1a1a1a;outline:none;width:'+(p.fotosDrive?'0px;opacity:0;margin:0;padding:0;':'150px;')+'font-family:inherit;transition:width .2s;" '+
         'onfocus="this.style.width=\'160px\';this.style.opacity=\'1\'" '+
         'onblur="if(!this.value)this.style.width=\'130px\'" '+
         'onchange="saveFotosDrive('+p.id+',this.value)" '+
@@ -4887,6 +5108,8 @@ function startSync(){
     _remoteUpdate = false;
     _renderGridOnly();
     if(activeProp) _origRenderDetail();
+    // Refresh inactivity tasks when props change
+    if(typeof injectInactivityTasks === 'function') setTimeout(injectInactivityTasks, 1000);
   });
   unsubscribers.push(unsubProps);
 
@@ -4945,6 +5168,8 @@ function startSync(){
     else if(asesores.length) tareasAsesorActivo = asesores[0].id;
     var tabEl = document.getElementById('tab-tareas');
     if(tabEl && tabEl.style.display !== 'none') renderTareas();
+    // Auto-inject inactivity reminders into Mi día
+    setTimeout(injectInactivityTasks, 3000);
   });
 }
 
