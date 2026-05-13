@@ -249,13 +249,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
   background:transparent !important;
   border-bottom-color:transparent !important;
 }
-.nav-item:not(.active):focus{
-  background:transparent !important;
-  outline:none;
-}
-.nav-item:focus{
-  outline:none;
-}
+.nav-item:focus{outline:none;}
 .nav-item svg{flex-shrink:0;color:inherit;}
 
 .nav-badge{
@@ -424,11 +418,17 @@ body.dark #dark-toggle{background:#333;border-color:#444;color:#fff;}display:inl
         <option value="">Todos los tipos</option>
         <option>Casa</option><option>Dpto</option><option>PH</option><option>Monoambiente</option><option>Lote</option><option>Galpon</option><option>Local</option>
       </select>
+      <select id="filt-tag" onchange="renderGrid()" style="height:36px;padding:0 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);outline:none;font-family:inherit;">
+        <option value="">Todas las etiquetas</option>
+        <option value="urgente">🔴 Urgente</option>
+        <option value="oportunidad">🟢 Oportunidad</option>
+        <option value="precio a revisar">🟡 Precio a revisar</option>
+        <option value="propietario dificil">🟣 Propietario difícil</option>
+      </select>
       <select id="filt-asesor" onchange="renderGrid()" style="height:36px;padding:0 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);outline:none;font-family:inherit;">
         <option value="">Todos los asesores</option>
       </select>
       <button class="btn btn-primary" onclick="openModal('prop')">+ Nueva propiedad</button>
-      <button id="btn-view-toggle" onclick="toggleViewMode()" title="Cambiar vista" style="height:36px;width:36px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;">⊞</button>
       <button class="btn" id="btn-tokko-import" onclick="importarDesdeTokko()" style="background:#fff;border-color:#ddd;color:#555;" title="Importar propiedades desde Tokko Broker">🔄 Importar desde Tokko</button>
       <button class="btn" onclick="sincronizarPreciosTokko()" style="background:#fff;border-color:#EF9F27;color:#854F0B;" title="Verificar cambios de precio en Tokko">💰 Sincronizar precios</button>
     </div>
@@ -550,7 +550,7 @@ function mkProp(id, d){
     aptoBanco:d.aptoBanco||false, cartel:d.cartel||false,
     publicacion:d.publicacion||'Simple', observaciones:d.observaciones||'',
     ingreso:d.ingreso||'', ult:d.ult||'',
-    tasks, lastOpen:Date.now(), finalizada:false, fechaFin:'', lastContacto:'', visitas:[], fechaVencAuth:'', fotosDrive:'', comentarios:[], historialPrecios:[], activityLog:[], docs:{boleto:false,escritura:false,planoObra:false,planoPH:false,reglamento:false}
+    tasks, lastOpen:Date.now(), finalizada:false, fechaFin:'', lastContacto:'', visitas:[], fechaVencAuth:'', fotosDrive:'', comentarios:[], historialPrecios:[], activityLog:[], tags:[], docs:{boleto:false,escritura:false,planoObra:false,planoPH:false,reglamento:false}
   };
 }
 
@@ -892,14 +892,6 @@ function generarDescripcionPlantilla(pid){
   showSaveToast('Descripcion generada');
 }
 
-function toggleViewMode(){
-  window._compactView = !window._compactView;
-  var btn = document.getElementById('btn-view-toggle');
-  if(btn) btn.textContent = window._compactView ? '☰' : '⊞';
-  try{ localStorage.setItem('sessa-view-mode', window._compactView?'compact':'grid'); }catch(e){}
-  _renderGridOnly();
-}
-
 function addActivityLog(p, texto){
   if(!p) return;
   if(!p.activityLog) p.activityLog = [];
@@ -930,6 +922,104 @@ function agregarComentario(pid){
   inp.value = '';
   saveProp(p);
   renderDetail();
+}
+
+function toggleTag(pid, tag){
+  var p = props.find(function(x){return x.id===pid;}); if(!p) return;
+  if(!p.tags) p.tags = [];
+  var idx = p.tags.indexOf(tag);
+  if(idx>=0) p.tags.splice(idx,1);
+  else p.tags.push(tag);
+  saveProp(p);
+  renderGrid(); renderDetail();
+}
+
+function duplicarProp(pid){
+  var p = props.find(function(x){return x.id===pid;}); if(!p) return;
+  var addr = prompt('Dirección de la nueva propiedad (copia de "'+p.addr+'"):');
+  if(!addr || !addr.trim()) return;
+  var nid = ++nextId;
+  var copy = JSON.parse(JSON.stringify(p));
+  copy.id = nid;
+  copy.addr = addr.trim();
+  copy.comentarios = [];
+  copy.activityLog = [];
+  copy.visitas = [];
+  copy.lastContacto = '';
+  // Reset checklists
+  var defaultP = mkProp(nid, {addr:addr.trim(), tipo:p.tipo, asesorId:p.asesorId, precio:p.precio, ingreso:p.ingreso});
+  copy.tasks = defaultP.tasks;
+  props.unshift(copy);
+  saveProp(copy);
+  saveMeta();
+  activeProp = nid;
+  renderGrid(); renderDetail();
+  showSaveToast('✅ Propiedad duplicada');
+}
+
+function abrirFusionar(pid){
+  var p = props.find(function(x){return x.id===pid;}); if(!p) return;
+  var overlay = document.createElement('div');
+  overlay.className = 'resumen-overlay';
+  overlay.onclick = function(e){ if(e.target===overlay) overlay.remove(); };
+  var opts = props.filter(function(x){return x.id!==pid&&!x.finalizada;})
+    .map(function(x){ return '<option value="'+x.id+'">'+x.addr+' ('+x.tipo+')</option>'; }).join('');
+  overlay.innerHTML =
+    '<div class="resumen-modal" style="max-width:420px;">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">'+
+        '<h3 style="font-size:15px;font-weight:700;">⇄ Fusionar con otra propiedad</h3>'+
+        '<button onclick="closeOverlay(this)" style="background:none;border:none;font-size:20px;cursor:pointer;color:#888;">×</button>'+
+      '</div>'+
+      '<p style="font-size:13px;color:var(--text3);margin-bottom:14px;">Se va a mantener <strong>'+p.addr+'</strong> como propiedad principal. La otra se va a eliminar y sus visitas y notas se van a fusionar aquí.</p>'+
+      '<select id="fusionar-sel" style="width:100%;height:36px;padding:0 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);outline:none;font-family:inherit;">'+
+        '<option value="">Seleccioná la propiedad a fusionar...</option>'+opts+
+      '</select>'+
+      '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;padding-top:14px;border-top:1px solid var(--border2);">'+
+        '<button onclick="closeOverlay(this)" style="height:34px;padding:0 14px;font-size:12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);cursor:pointer;font-family:inherit;">Cancelar</button>'+
+        '<button onclick="doFusionar('+pid+')" style="height:34px;padding:0 16px;font-size:12px;font-weight:700;border:none;border-radius:var(--radius-sm);background:#A32D2D;color:#fff;cursor:pointer;font-family:inherit;">⇄ Fusionar</button>'+
+      '</div>'+
+    '</div>';
+  document.body.appendChild(overlay);
+}
+
+function doFusionar(pid1){ var sel=document.getElementById('fusionar-sel'); if(sel) fusionarProps(pid1,parseInt(sel.value)); }
+
+function fusionarProps(pid1, pid2){
+  if(!pid2){ alert('Seleccioná una propiedad'); return; }
+  var p1 = props.find(function(x){return x.id===pid1;});
+  var p2 = props.find(function(x){return x.id===pid2;});
+  if(!p1||!p2) return;
+  if(!confirm('¿Fusionar "'+p2.addr+'" dentro de "'+p1.addr+'"? Esta acción no se puede deshacer.')) return;
+  // Merge visitas
+  if(!p1.visitas) p1.visitas = [];
+  if(p2.visitas&&p2.visitas.length) p1.visitas = p1.visitas.concat(p2.visitas);
+  // Merge comentarios
+  if(!p1.comentarios) p1.comentarios = [];
+  if(p2.comentarios&&p2.comentarios.length) p1.comentarios = p1.comentarios.concat(p2.comentarios);
+  // Merge activityLog
+  if(!p1.activityLog) p1.activityLog = [];
+  p1.activityLog.push({texto:'Fusionada con: '+p2.addr,quien:'Sistema',fecha:new Date().toLocaleDateString('es-AR'),ts:Date.now()});
+  // Merge tags
+  if(p2.tags) p2.tags.forEach(function(t){ if(!p1.tags) p1.tags=[]; if(!p1.tags.includes(t)) p1.tags.push(t); });
+  // Delete p2
+  props = props.filter(function(x){return x.id!==pid2;});
+  window._fb.deleteDoc(window._fb.doc(window._fb.db,'sessa_props',String(pid2))).catch(function(e){console.error(e);});
+  saveProp(p1);
+  document.querySelector('.resumen-overlay').remove();
+  activeProp = pid1;
+  renderGrid(); renderDetail();
+  showSaveToast('✅ Propiedades fusionadas');
+}
+
+function copiarLinkColega(pid, tokkoId){
+  // Tokko broker share link format
+  var link = 'https://www.tokkobroker.com/shared_property/?key=a816281c7b5e042cf4b63ce93dae3b4ff5817c7e&property_id='+tokkoId;
+  navigator.clipboard.writeText(link).then(function(){
+    showSaveToast('🔗 Link de colega copiado');
+  }).catch(function(){
+    // Fallback: show the link in a prompt so user can copy manually
+    prompt('Copiá el link de colega:', link);
+  });
 }
 
 function saveFotosDrive(pid, val){
@@ -1653,6 +1743,8 @@ function showBackupReminder(){
   document.body.appendChild(bar);
 }
 
+function closeOverlay(el){ var o=el.closest('.resumen-overlay'); if(o) o.remove(); }
+
 function closeBackupReminder(){
   var el=document.getElementById('backup-reminder');
   if(el) el.remove();
@@ -2305,6 +2397,32 @@ function renderCompradorDetail(){
       'title="Resumen para WhatsApp">📋 Resumen</button>'+
       (p.tokkoUrl ? '<a href="'+p.tokkoUrl+'" target="_blank" onclick="event.stopPropagation()" '+
       'style="margin-top:4px;height:28px;padding:0 10px;font-size:11px;font-weight:600;border-radius:8px;font-family:inherit;border:1px solid #185FA5;background:#E6F1FB;color:#0C447C;text-decoration:none;display:flex;align-items:center;white-space:nowrap;">Ver en Tokko ↗</a>' : '')+
+      (p.tokkoId ? '<button data-pid="'+p.id+'" data-tid="'+p.tokkoId+'" onclick="event.stopPropagation();copiarLinkColega(this.dataset.pid,this.dataset.tid)" '+
+      'style="margin-top:4px;height:28px;padding:0 10px;font-size:11px;font-weight:600;border-radius:8px;font-family:inherit;border:1px solid #534AB7;background:#EEEDFE;color:#3C3489;cursor:pointer;white-space:nowrap;">🔗 Link colega</button>' : '')+
+      // Tags
+      '<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;align-items:center;">'+
+        ((p.tags&&p.tags.length)?p.tags.map(function(t){
+          var tc={urgente:'#FCEBEB',oportunidad:'#E1F5EE','precio a revisar':'#FAEEDA','propietario dificil':'#EEEDFE'}[t]||'#E6F1FB';
+          var tx={urgente:'#A32D2D',oportunidad:'#0F6E56','precio a revisar':'#854F0B','propietario dificil':'#534AB7'}[t]||'#185FA5';
+          return '<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:'+tc+';color:'+tx+';cursor:pointer;" '+
+            'onclick="event.stopPropagation();toggleTag('+p.id+',\''+t+'\')" title="Clic para quitar">'+t+' ×</span>';
+        }).join(''):'') +
+        '<select onchange="(function(v){if(v)toggleTag('+p.id+',v);this.value=\'\';})" onclick="event.stopPropagation()" '+
+        'style="height:22px;font-size:10px;border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--text3);outline:none;font-family:inherit;padding:0 6px;cursor:pointer;">'+
+          '<option value="">+ Etiqueta</option>'+
+          ['urgente','oportunidad','precio a revisar','propietario dificil'].map(function(t){
+            return '<option value="'+t+'">'+t+'</option>';
+          }).join('')+
+        '</select>'+
+      '</div>'+
+      // Duplicate + Merge buttons
+      '<div style="margin-top:4px;display:flex;gap:4px;">'+
+        '<button data-pid="'+p.id+'" onclick="event.stopPropagation();duplicarProp(parseInt(this.dataset.pid))" '+
+        'style="height:24px;padding:0 10px;font-size:10px;font-weight:600;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text2);cursor:pointer;font-family:inherit;">⧉ Duplicar</button>'+
+        '<button data-pid="'+p.id+'" onclick="event.stopPropagation();abrirFusionar(parseInt(this.dataset.pid))" '+
+        'style="height:24px;padding:0 10px;font-size:10px;font-weight:600;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text2);cursor:pointer;font-family:inherit;">⇄ Fusionar</button>'+
+      '</div>'+
+
       // Fotos Drive button
       '<div style="margin-top:4px;display:flex;align-items:center;gap:4px;">'+
         (p.fotosDrive ?
@@ -2732,6 +2850,173 @@ function propMatchesFilter(p){
     return d.getFullYear()===parseInt(ym[0]) && (d.getMonth()+1)===parseInt(ym[1]);
   }
   return true;
+}
+
+
+function renderDashboard(period){
+  var today = new Date();
+  var mes = today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0');
+
+  // KPIs
+  var activas = props.filter(function(p){return !p.finalizada;}).length;
+  var inact14 = props.filter(function(p){var d=diasSinContacto(p);return !p.finalizada&&d!==null&&d>=14;}).length;
+  var inact7  = props.filter(function(p){var d=diasSinContacto(p);return !p.finalizada&&d!==null&&d>=7&&d<14;}).length;
+  var enCierre = props.filter(function(p){return !p.finalizada&&stg(p)&&stg(p).id==='cierre';}).length;
+  var finalizadas = props.filter(function(p){return p.finalizada;}).length;
+  var reservasMes = reservasLog.filter(function(r){return r.mes===mes;}).length;
+  var captActivas = captaciones.filter(function(c){return c.estado==='activa';}).length;
+  var comprActivos = compradores.filter(function(c){return !c.finalizada;}).length;
+  var busquActivas = busquedas.filter(function(b){return b.estado==='activa';}).length;
+
+  // Avg days to close
+  var closed = props.filter(function(p){return p.finalizada&&p.ingreso&&p.fechaFin;});
+  var avgCierre = null;
+  if(closed.length){
+    var total = closed.reduce(function(acc,p){
+      var parts=(p.ingreso||'').split('/');
+      if(parts.length!==3) return acc;
+      var ini=new Date(parts[2],parts[1]-1,parts[0]).getTime();
+      var parts2=(p.fechaFin||'').split('/');
+      if(parts2.length!==3) return acc;
+      var fin=new Date(parts2[2],parts2[1]-1,parts2[0]).getTime();
+      return acc + Math.floor((fin-ini)/86400000);
+    },0);
+    avgCierre = Math.round(total/closed.length);
+  }
+
+  // Props by stage
+  var byStage = {pre:0,mkt:0,seg:0,cierre:0};
+  props.filter(function(p){return !p.finalizada;}).forEach(function(p){
+    var s=stg(p); if(s&&byStage[s.id]!==undefined) byStage[s.id]++;
+  });
+
+  // Asesor ranking
+  var ranking = asesores.map(function(a){
+    var myProps = props.filter(function(p){
+      var tkName=(p.tokkoProducerName||'').trim().toLowerCase();
+      return !p.finalizada&&(p.asesorId===a.id||tkName===a.name.trim().toLowerCase());
+    });
+    var visitas = myProps.reduce(function(acc,p){return acc+(p.visitas?p.visitas.length:0);},0);
+    var enCierreA = myProps.filter(function(p){return stg(p)&&stg(p).id==='cierre';}).length;
+    var reservasA = reservasLog.filter(function(r){return r.asesorName===a.name;}).length;
+    return {name:a.name,color:a.color,props:myProps.length,visitas:visitas,cierre:enCierreA,reservas:reservasA};
+  }).sort(function(a,b){return b.props-a.props;});
+
+  // Most inactive props (top 5)
+  var criticas = props.filter(function(p){
+    return !p.finalizada && diasSinContacto(p)!==null && diasSinContacto(p)>=14;
+  }).sort(function(a,b){
+    return (diasSinContacto(b)||0)-(diasSinContacto(a)||0);
+  }).slice(0,5);
+
+  var h = '';
+
+  // Row 1: Main KPIs
+  h += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;">';
+  var kpis = [
+    {label:'Propiedades activas',val:activas,color:'#3D5FA0',sub:'en cartera'},
+    {label:'En cierre',val:enCierre,color:'#0F6E56',sub:'etapa final'},
+    {label:'Reservas este mes',val:reservasMes,color:'#534AB7',sub:mes},
+    {label:'Días prom. cierre',val:avgCierre!==null?avgCierre+'d':'—',color:'#854F0B',sub:closed.length+' operaciones'},
+  ];
+  kpis.forEach(function(k){
+    h += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;border-left:4px solid '+k.color+';">'+
+      '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">'+k.label+'</div>'+
+      '<div style="font-size:32px;font-weight:800;color:'+k.color+';line-height:1;">'+k.val+'</div>'+
+      '<div style="font-size:11px;color:var(--text3);margin-top:4px;">'+k.sub+'</div>'+
+    '</div>';
+  });
+  h += '</div>';
+
+  // Row 2: Alerts + pipeline
+  h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">';
+
+  // Inactivity alerts
+  h += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;">'+
+    '<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:12px;">🔴 Propiedades críticas (+14 días)</div>';
+  if(!criticas.length){
+    h += '<div style="font-size:13px;color:var(--text3);text-align:center;padding:16px 0;">✅ Todas al día</div>';
+  } else {
+    criticas.forEach(function(p){
+      var d = diasSinContacto(p);
+      h += '<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border2);">'+
+        '<div style="flex:1;min-width:0;">'+
+          '<div style="font-size:12px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+p.addr+'</div>'+
+          '<div style="font-size:11px;color:var(--text3);">'+(p.tokkoProducerName||getA(p.asesorId).name)+'</div>'+
+        '</div>'+
+        '<span style="font-size:11px;font-weight:700;color:#A32D2D;background:#FCEBEB;padding:2px 8px;border-radius:12px;">'+d+' días</span>'+
+      '</div>';
+    });
+  }
+  h += '</div>';
+
+  // Pipeline funnel
+  h += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;">'+
+    '<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:12px;">📊 Pipeline actual</div>';
+  var stages = [{id:'pre',label:'Pre-Listing',color:'#534AB7'},{id:'mkt',label:'Marketing',color:'#3D5FA0'},{id:'seg',label:'Seguimiento',color:'#854F0B'},{id:'cierre',label:'Cierre',color:'#0F6E56'}];
+  var maxStage = Math.max(1, Math.max.apply(null, stages.map(function(s){return byStage[s.id]||0;})));
+  stages.forEach(function(s){
+    var cnt = byStage[s.id]||0;
+    var pct = Math.round((cnt/activas)*100)||0;
+    h += '<div style="margin-bottom:10px;">'+
+      '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;">'+
+        '<span style="color:var(--text2);">'+s.label+'</span>'+
+        '<span style="font-weight:700;color:'+s.color+';">'+cnt+' <span style="font-weight:400;color:var(--text3);">('+pct+'%)</span></span>'+
+      '</div>'+
+      '<div style="height:8px;background:var(--border2);border-radius:4px;">'+
+        '<div style="height:100%;width:'+Math.round((cnt/maxStage)*100)+'%;background:'+s.color+';border-radius:4px;transition:width .3s;"></div>'+
+      '</div>'+
+    '</div>';
+  });
+  h += '</div>';
+
+  h += '</div>';
+
+  // Row 3: Asesor ranking + quick stats
+  h += '<div style="display:grid;grid-template-columns:2fr 1fr;gap:12px;">';
+
+  // Ranking
+  h += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;">'+
+    '<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:12px;">🏆 Ranking asesores</div>'+
+    '<div style="display:grid;grid-template-columns:1fr auto auto auto;gap:8px;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;padding-bottom:8px;border-bottom:1px solid var(--border2);margin-bottom:8px;">'+
+      '<span>Asesor</span><span style="text-align:center;">Props</span><span style="text-align:center;">Visitas</span><span style="text-align:center;">Reservas</span>'+
+    '</div>';
+  ranking.forEach(function(a,i){
+    h += '<div style="display:grid;grid-template-columns:1fr auto auto auto;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border2);">'+
+      '<div style="display:flex;align-items:center;gap:8px;">'+
+        '<div style="width:6px;height:6px;border-radius:50%;background:'+a.color+';flex-shrink:0;"></div>'+
+        '<span style="font-size:13px;font-weight:600;color:var(--text);">'+a.name+'</span>'+
+        (a.cierre?'<span style="font-size:10px;background:#E1F5EE;color:#0F6E56;padding:1px 6px;border-radius:10px;font-weight:600;">'+a.cierre+' en cierre</span>':'')+
+      '</div>'+
+      '<span style="font-size:14px;font-weight:700;color:#3D5FA0;text-align:center;">'+a.props+'</span>'+
+      '<span style="font-size:14px;font-weight:700;color:#534AB7;text-align:center;">'+a.visitas+'</span>'+
+      '<span style="font-size:14px;font-weight:700;color:#0F6E56;text-align:center;">'+a.reservas+'</span>'+
+    '</div>';
+  });
+  h += '</div>';
+
+  // Quick stats column
+  h += '<div style="display:flex;flex-direction:column;gap:12px;">'+
+    '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;">'+
+      '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Estado general</div>'+
+      '<div style="display:flex;flex-direction:column;gap:8px;">'+
+        '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--text2);">🟡 Inactivas 7-13d</span><span style="font-weight:700;color:#854F0B;">'+inact7+'</span></div>'+
+        '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--text2);">🔴 Inactivas +14d</span><span style="font-weight:700;color:#A32D2D;">'+inact14+'</span></div>'+
+        '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--text2);">✅ Finalizadas</span><span style="font-weight:700;color:#0F6E56;">'+finalizadas+'</span></div>'+
+      '</div>'+
+    '</div>'+
+    '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;">'+
+      '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Activos hoy</div>'+
+      '<div style="display:flex;flex-direction:column;gap:8px;">'+
+        '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--text2);">👥 Compradores</span><span style="font-weight:700;color:#3D5FA0;">'+comprActivos+'</span></div>'+
+        '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--text2);">🎯 Captaciones</span><span style="font-weight:700;color:#3D5FA0;">'+captActivas+'</span></div>'+
+        '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--text2);">🔍 Búsquedas</span><span style="font-weight:700;color:#3D5FA0;">'+busquActivas+'</span></div>'+
+      '</div>'+
+    '</div>'+
+  '</div>';
+
+  h += '</div>';
+  return h;
 }
 
 function renderStats(){
@@ -4469,6 +4754,32 @@ function renderDetail(){
       'title="Resumen para WhatsApp">📋 Resumen</button>'+
       (p.tokkoUrl ? '<a href="'+p.tokkoUrl+'" target="_blank" onclick="event.stopPropagation()" '+
       'style="margin-top:4px;height:28px;padding:0 10px;font-size:11px;font-weight:600;border-radius:8px;font-family:inherit;border:1px solid #185FA5;background:#E6F1FB;color:#0C447C;text-decoration:none;display:flex;align-items:center;white-space:nowrap;">Ver en Tokko ↗</a>' : '')+
+      (p.tokkoId ? '<button data-pid="'+p.id+'" data-tid="'+p.tokkoId+'" onclick="event.stopPropagation();copiarLinkColega(this.dataset.pid,this.dataset.tid)" '+
+      'style="margin-top:4px;height:28px;padding:0 10px;font-size:11px;font-weight:600;border-radius:8px;font-family:inherit;border:1px solid #534AB7;background:#EEEDFE;color:#3C3489;cursor:pointer;white-space:nowrap;">🔗 Link colega</button>' : '')+
+      // Tags
+      '<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;align-items:center;">'+
+        ((p.tags&&p.tags.length)?p.tags.map(function(t){
+          var tc={urgente:'#FCEBEB',oportunidad:'#E1F5EE','precio a revisar':'#FAEEDA','propietario dificil':'#EEEDFE'}[t]||'#E6F1FB';
+          var tx={urgente:'#A32D2D',oportunidad:'#0F6E56','precio a revisar':'#854F0B','propietario dificil':'#534AB7'}[t]||'#185FA5';
+          return '<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:'+tc+';color:'+tx+';cursor:pointer;" '+
+            'onclick="event.stopPropagation();toggleTag('+p.id+',\''+t+'\')" title="Clic para quitar">'+t+' ×</span>';
+        }).join(''):'') +
+        '<select onchange="(function(v){if(v)toggleTag('+p.id+',v);this.value=\'\';})" onclick="event.stopPropagation()" '+
+        'style="height:22px;font-size:10px;border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--text3);outline:none;font-family:inherit;padding:0 6px;cursor:pointer;">'+
+          '<option value="">+ Etiqueta</option>'+
+          ['urgente','oportunidad','precio a revisar','propietario dificil'].map(function(t){
+            return '<option value="'+t+'">'+t+'</option>';
+          }).join('')+
+        '</select>'+
+      '</div>'+
+      // Duplicate + Merge buttons
+      '<div style="margin-top:4px;display:flex;gap:4px;">'+
+        '<button data-pid="'+p.id+'" onclick="event.stopPropagation();duplicarProp(parseInt(this.dataset.pid))" '+
+        'style="height:24px;padding:0 10px;font-size:10px;font-weight:600;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text2);cursor:pointer;font-family:inherit;">⧉ Duplicar</button>'+
+        '<button data-pid="'+p.id+'" onclick="event.stopPropagation();abrirFusionar(parseInt(this.dataset.pid))" '+
+        'style="height:24px;padding:0 10px;font-size:10px;font-weight:600;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text2);cursor:pointer;font-family:inherit;">⇄ Fusionar</button>'+
+      '</div>'+
+
       // Fotos Drive button
       '<div style="margin-top:4px;display:flex;align-items:center;gap:4px;">'+
         (p.fotosDrive ?
@@ -4827,7 +5138,6 @@ var currentUserEmail = '';
 // ── Roles ─────────────────────────────────────────────────────────────────────
 // ADMIN_EMAIL, isAdmin() and currentAsesorId() defined above in permissions section
 var syncTimeout = null;
-try{ window._compactView = localStorage.getItem('sessa-view-mode')==='compact'; }catch(e){ window._compactView=false; }
 var unsubscribers = [];
 
 // Set login logo same as app logo
