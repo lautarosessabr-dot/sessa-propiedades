@@ -557,7 +557,7 @@ function mkProp(id, d){
     aptoBanco:d.aptoBanco||false, cartel:d.cartel||false,
     publicacion:d.publicacion||'Simple', observaciones:d.observaciones||'',
     ingreso:d.ingreso||'', ult:d.ult||'',
-    tasks, lastOpen:Date.now(), finalizada:false, fechaFin:'', lastContacto:'', visitas:[], fechaVencAuth:'', fotosDrive:'', comentarios:[], historialPrecios:[], activityLog:[], tags:[], docs:{boleto:false,escritura:false,planoObra:false,planoPH:false,reglamento:false}
+    tasks, lastOpen:Date.now(), finalizada:false, fechaFin:'', lastContacto:'', visitas:[], fechaVencAuth:'', fotosDrive:'', resumenGuardado:'', comentarios:[], historialPrecios:[], activityLog:[], tags:[], docs:{boleto:false,escritura:false,planoObra:false,planoPH:false,reglamento:false}
   };
 }
 
@@ -1486,17 +1486,17 @@ async function generarDescripcion(pid){
     (inputText ? 'Detalles adicionales: ' + inputText + '\n' : '') +
     'Usá un tono profesional y persuasivo. No uses emojis. Destacá las características principales.';
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method:'POST',
-      headers:{'Content-Type':'application/json'},
+      headers:{'Content-Type':'application/json','Authorization':'Bearer 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'},
       body:JSON.stringify({
-        model:'claude-sonnet-4-20250514',
+        model:'llama-3.3-70b-versatile',
         max_tokens:400,
         messages:[{role:'user',content:prompt}]
       })
     });
     const data = await res.json();
-    const text = data.content && data.content[0] ? data.content[0].text : '';
+    const text = data.choices && data.choices[0] ? data.choices[0].message.content : '';
     if(txtEl) txtEl.value = text;
   } catch(err){
     if(txtEl) txtEl.value = 'Error al conectar con la IA. Intentá de nuevo.';
@@ -1648,6 +1648,7 @@ function cardHTML(p){
       '<span style="display:flex;align-items:center;gap:6px;">'+
         (p.visitas&&p.visitas.length>0?'<span style="font-size:10px;color:#185FA5;font-weight:600;">👁 '+p.visitas.length+'</span>':'')+
         (p.fotosDrive?'<span style="font-size:12px;" title="Tiene fotos en Drive">📷</span>':'')+
+        (p.resumenGuardado?'<span style="font-size:12px;" title="Tiene resumen guardado">📋</span>':'')+
       '</span>'+
     '</div>'+
     '<div class="prog-lbl"><span>avance</span><span>'+pc+'%</span></div>'+
@@ -1676,23 +1677,28 @@ function openResumen(pid){
   var existing = document.getElementById('resumen-overlay');
   if(existing) existing.remove();
 
+  // Use saved resumen if exists
+  var initialText = (p.resumenGuardado && p.resumenGuardado.trim()) ? p.resumenGuardado : defaultText;
+
   var overlay = document.createElement('div');
   overlay.id = 'resumen-overlay';
   overlay.className = 'resumen-overlay';
+  overlay.dataset.pid = pid;
   overlay.onclick = function(e){ if(e.target===overlay) overlay.remove(); };
 
   overlay.innerHTML =
     '<div class="resumen-modal">'+
       '<h3>📋 Resumen para WhatsApp</h3>'+
-      '<p>Editá el texto y copialo directo al portapapeles.</p>'+
-      '<textarea id="resumen-txt" class="resumen-textarea" rows="6" maxlength="500">'+defaultText+'</textarea>'+
+      '<p style="font-size:12px;color:var(--text3);margin-bottom:8px;">Editá, guardá y copialo cuando quieras.</p>'+
+      '<textarea id="resumen-txt" class="resumen-textarea" rows="8" style="min-height:180px;">'+initialText+'</textarea>'+
       '<div style="font-size:11px;color:#bbb;margin-top:4px;text-align:right;" id="resumen-count"></div>'+
       '<div class="resumen-actions">'+
         '<button onclick="closeResumen()" '+
         'style="height:34px;padding:0 14px;font-size:12px;border:1px solid #ddd;border-radius:8px;background:#fff;color:#666;cursor:pointer;font-family:inherit;">Cerrar</button>'+
+        '<button onclick="guardarResumen()" '+
+        'style="height:34px;padding:0 14px;font-size:12px;font-weight:700;border:none;border-radius:8px;background:#185FA5;color:#fff;cursor:pointer;font-family:inherit;">💾 Guardar</button>'+
         '<button onclick="copyResumen()" '+
         'style="height:34px;padding:0 16px;font-size:12px;font-weight:700;border:1px solid #185FA5;border-radius:8px;background:#E6F1FB;color:#0C447C;cursor:pointer;font-family:inherit;">📋 Copiar</button>'+
-
       '</div>'+
     '</div>';
 
@@ -1705,6 +1711,20 @@ function openResumen(pid){
   txt.addEventListener('input', updateCount);
   updateCount();
   txt.focus();
+}
+
+function guardarResumen(){
+  var overlay = document.getElementById('resumen-overlay');
+  var txt = document.getElementById('resumen-txt');
+  if(!overlay||!txt) return;
+  var pid = parseInt(overlay.dataset.pid);
+  var p = props.find(function(x){return x.id===pid;}); if(!p) return;
+  p.resumenGuardado = txt.value;
+  saveProp(p);
+  showSaveToast('✅ Resumen guardado');
+  // Flash button
+  var btn = overlay.querySelector('button[onclick="guardarResumen()"]');
+  if(btn){ btn.textContent='✅ Guardado'; setTimeout(function(){ btn.textContent='💾 Guardar'; },2000); }
 }
 
 function checkBackupReminder(){
@@ -4504,6 +4524,11 @@ function renderIA(){
           '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;">Responder consulta</div>'+
           '<div style="font-size:12px;color:var(--text3);">Pegá una consulta recibida y la IA te sugiere cómo responder.</div>'+
         '</div>'+
+        '<div onclick="abrirHerramientaIA(&quot;resumen_wpp&quot;)" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;cursor:pointer;transition:all .15s;" onmouseover="this.style.borderColor=&quot;var(--accent)&quot;" onmouseout="this.style.borderColor=&quot;var(--border)&quot;">'+
+          '<div style="font-size:28px;margin-bottom:10px;">📲</div>'+
+          '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;">Resumen WhatsApp</div>'+
+          '<div style="font-size:12px;color:var(--text3);">Convertí la descripción de una propiedad en un resumen visual con emojis para enviar por WhatsApp.</div>'+
+        '</div>'+
       '</div>'+
 
       // Active tool area
@@ -4532,6 +4557,12 @@ function abrirHerramientaIA(tool){
       placeholder: 'Pegá acá la consulta que recibiste (por WhatsApp, Zonaprop, etc.)...',
       system: 'Sos un asesor inmobiliario profesional argentino de Sessa Propiedades. Redactá una respuesta profesional, amable y concisa a la consulta que te den. En español argentino. Máximo 80 palabras.',
       btn: '✨ Generar respuesta'
+    },
+    resumen_wpp: {
+      title: '📲 Resumen WhatsApp con emojis',
+      placeholder: 'Pegá acá la descripción completa de la propiedad (la de Tokko, Zonaprop, etc.)...',
+      system: 'Sos un asesor inmobiliario argentino. Convertí la descripción de una propiedad en un resumen visual para WhatsApp usando emojis. El formato debe ser exactamente así (dejá en blanco los que no tengan info pero mantené el emoji):\n🏢 [tipo y cantidad de ambientes]\n📍 [dirección]\n🛏️ [dormitorios]\n🚿 [baños]\n🍽️ [cocina]\n☀️ [iluminación/orientación]\n🚗 [cochera si tiene]\n📐 [superficie si tiene]\n💰 [precio]\n✅ [condición: apto banco, escritura, etc.]\n\nSolo el resumen, sin texto adicional, sin explicaciones. Cada ítem en una línea separada.',
+      btn: '✨ Generar resumen'
     }
   };
 
