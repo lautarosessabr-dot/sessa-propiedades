@@ -66,7 +66,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
 .hstat-lbl{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-top:3px;font-weight:500;}
 .tabs{display:flex;gap:0;border-bottom:1.5px solid var(--border);margin-bottom:20px;}
 .tab{font-size:13px;font-weight:500;padding:10px 20px;border:none;background:transparent;color:var(--text3);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1.5px;font-family:inherit;transition:color .15s;}
-.tab.active{color:var(--accent);border-bottom-color:var(--accent);font-weight:700;}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent);font-weight:700;} /* legacy */
 .toolbar{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;}
 .toolbar input{flex:1;min-width:150px;height:36px;padding:0 12px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);outline:none;font-family:inherit;transition:border-color .15s;}
 .toolbar input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(24,95,165,.08);}
@@ -231,7 +231,11 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
 }
 .nav-item:hover{background:var(--surface2);color:var(--text);}
 .nav-item.active{
-  background:var(--accent-bg);color:var(--accent);font-weight:600;
+  background:var(--accent-bg) !important;color:var(--accent) !important;font-weight:600;
+}
+.nav-item:not(.active){
+  background:transparent !important;
+  border-bottom-color:transparent !important;
 }
 .nav-item svg{flex-shrink:0;color:inherit;}
 
@@ -334,6 +338,7 @@ body.dark #dark-toggle{background:#333;border-color:#444;color:#fff;}display:inl
       <div class="sidebar-logo">
         <img class="logo-img" id="logo-img" alt="Sessa Propiedades"/>
       </div>
+      <div id="header-stats" style="display:flex;gap:0;flex-direction:column;padding:10px 14px;border-bottom:1px solid var(--border2);"></div>
 
       <nav class="sidebar-nav">
         <button class="nav-item active" onclick="setTab('props',this)" data-tab="props">
@@ -1268,10 +1273,20 @@ function updStats(){
   // Update browser tab title with inactivas count
   var inacCount = props.filter(function(p){ var d=diasSinContacto(p); return !p.finalizada&&d!==null&&d>=14&&canViewProp(p); }).length;
   document.title = inacCount > 0 ? '('+inacCount+') Sessa Propiedades' : 'Sessa Propiedades';
-  document.getElementById('header-stats').innerHTML =
-    '<div class="hstat"><div class="hstat-num">'+act+'</div><div class="hstat-lbl">Activas</div></div>'+
-    '<div class="hstat"><div class="hstat-num" style="color:#1D9E75;">'+ec+'</div><div class="hstat-lbl">En cierre</div></div>'+
-    '<div class="hstat"><div class="hstat-num" style="color:#888;">'+fin+'</div><div class="hstat-lbl">Finalizadas</div></div>';
+  var statsEl = document.getElementById('header-stats');
+  if(statsEl) statsEl.innerHTML =
+    '<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;">'+
+      '<span style="font-size:11px;color:var(--text3);">Activas</span>'+
+      '<span style="font-size:14px;font-weight:700;color:var(--text);">'+act+'</span>'+
+    '</div>'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;">'+
+      '<span style="font-size:11px;color:var(--text3);">En cierre</span>'+
+      '<span style="font-size:14px;font-weight:700;color:#1D9E75;">'+ec+'</span>'+
+    '</div>'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;">'+
+      '<span style="font-size:11px;color:var(--text3);">Finalizadas</span>'+
+      '<span style="font-size:14px;font-weight:700;color:#888;">'+fin+'</span>'+
+    '</div>';
 }
 
 // ── Tarjetas ──────────────────────────────────────────────────────────────────
