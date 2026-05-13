@@ -59,7 +59,7 @@ window._fb = { auth, db, doc, collection, setDoc, updateDoc, getDoc, getDocs, on
 body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased;}
 .app{max-width:960px;margin:0 auto;padding:24px 20px 80px;}
 .header{display:flex;align-items:center;justify-content:space-between;padding:20px 0 18px;border-bottom:1.5px solid var(--border);margin-bottom:24px;}
-.logo-img{height:52px;width:auto;transition:opacity .2s;}
+.logo-img{height:40px;width:auto;transition:opacity .2s;}
 .header-stats{display:flex;gap:20px;}
 .hstat{text-align:right;}
 .hstat-num{font-size:26px;font-weight:700;color:var(--text);line-height:1;letter-spacing:-.02em;}
@@ -196,6 +196,90 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
 .field-missing{border:1.5px solid #EF9F27 !important;background:#FFFBF0 !important;}
 .field-missing-label{color:#854F0B !important;}
 .missing-badge{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;color:#854F0B;background:#FAEEDA;border:1px solid #854F0B;border-radius:10px;padding:2px 8px;margin-bottom:10px;}
+/* ── App Shell Layout ─────────────────────────────────────────── */
+.app-shell{display:flex;min-height:100vh;background:var(--bg);}
+
+.sidebar{
+  width:200px;flex-shrink:0;
+  background:var(--surface);
+  border-right:1px solid var(--border);
+  display:flex;flex-direction:column;
+  position:fixed;top:0;left:0;height:100vh;
+  z-index:100;
+}
+
+.sidebar-logo{
+  padding:20px 16px 16px;
+  border-bottom:1px solid var(--border2);
+}
+.sidebar-logo .logo-img{height:40px;width:auto;}
+
+.sidebar-nav{
+  flex:1;padding:12px 10px;
+  display:flex;flex-direction:column;gap:2px;
+  overflow-y:auto;
+}
+
+.nav-item{
+  display:flex;align-items:center;gap:10px;
+  width:100%;padding:9px 10px;
+  border:none;background:transparent;
+  border-radius:var(--radius-sm);
+  cursor:pointer;font-family:inherit;
+  font-size:13px;color:var(--text2);
+  text-align:left;transition:all .15s;
+}
+.nav-item:hover{background:var(--surface2);color:var(--text);}
+.nav-item.active{
+  background:var(--accent-bg);color:var(--accent);font-weight:600;
+}
+.nav-item svg{flex-shrink:0;color:inherit;}
+
+.nav-badge{
+  margin-left:auto;font-size:10px;font-weight:700;
+  background:var(--accent);color:#fff;
+  padding:1px 7px;border-radius:20px;
+  display:none;
+}
+.nav-badge.visible{display:inline-block;}
+
+.nav-divider{height:1px;background:var(--border2);margin:8px 4px;}
+
+.sidebar-footer{
+  border-top:1px solid var(--border2);
+  padding:12px 10px;
+}
+.sidebar-user{
+  display:flex;align-items:center;gap:8px;
+}
+.sidebar-avatar{
+  width:30px;height:30px;border-radius:50%;
+  background:var(--accent-bg);color:var(--accent);
+  font-size:11px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;
+}
+.sidebar-user-info{
+  display:flex;flex-direction:column;min-width:0;flex:1;
+}
+.sidebar-user-name{
+  font-size:12px;font-weight:600;color:var(--text);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.sidebar-user-role{font-size:10px;color:var(--text3);}
+
+.main-content{
+  margin-left:200px;flex:1;min-width:0;
+}
+
+body.dark .sidebar{background:#1a1a1a;border-color:#333;}
+body.dark .nav-item:hover{background:#242424;}
+body.dark .nav-item.active{background:#1a3a5c;color:#7EB8F7;}
+
+/* ── Override .app padding for new layout ────────────────────── */
+.app{max-width:none;padding:24px 28px 80px;}
+
+
 .save-dot{width:7px;height:7px;border-radius:50%;background:#1D9E75;
 /* Dark mode */
 body.dark{background:#1a1a1a;color:#e0e0e0;}
@@ -243,28 +327,72 @@ body.dark #dark-toggle{background:#333;border-color:#444;color:#fff;}display:inl
 
 <!-- Main App (hidden until logged in) -->
 <div class="app" id="main-app" style="display:none;">
-  <div class="header">
-    <img class="logo-img" id="logo-img" alt="Sessa Propiedades"/>
-    <div style="display:flex;align-items:center;gap:16px;">
-  <div class="header-stats" id="header-stats"></div>
-  <button id="dark-toggle" onclick="toggleDarkMode()" title="Modo oscuro" style="height:30px;width:30px;border:1px solid #ddd;border-radius:50%;background:#fff;cursor:pointer;font-size:15px;display:none;">🌙</button>
-  <div class="user-pill" id="user-pill" style="display:none;">
-    <span id="user-name"></span>
-    <button class="logout-btn" onclick="doLogout()">Salir</button>
-    <span class="save-dot" id="save-dot" title="Sincronizado"></span>
-  </div>
-</div>
-  </div>
-  <div class="tabs">
-    <button class="tab active" onclick="setTab('props',this)">Propiedades</button>
-    <button class="tab" onclick="setTab('compradores',this)">Compradores</button>
-    <button class="tab" id="tab-btn-asesores" onclick="setTab('asesores',this)">Asesores</button>
-    <button class="tab" id="tab-btn-stats" onclick="setTab('stats',this)">📊 Estadísticas</button>
-    <button class="tab" onclick="setTab('captaciones',this)">🎯 Captaciones</button>
-    <button class="tab" onclick="setTab('visitasdb',this)">🗂 Base de visitas</button>
-    <button class="tab" onclick="setTab('busquedas',this)">🔍 Búsquedas activas</button>
-    <button class="tab" onclick="setTab('tareas',this)">📋 Mi día</button>
-  </div>
+  <div class="app-shell">
+
+    <!-- Sidebar -->
+    <div class="sidebar" id="sidebar">
+      <div class="sidebar-logo">
+        <img class="logo-img" id="logo-img" alt="Sessa Propiedades"/>
+      </div>
+
+      <nav class="sidebar-nav">
+        <button class="nav-item active" onclick="setTab('props',this)" data-tab="props">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          <span>Propiedades</span>
+          <span class="nav-badge" id="nav-badge-props"></span>
+        </button>
+        <button class="nav-item" onclick="setTab('compradores',this)" data-tab="compradores">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <span>Compradores</span>
+        </button>
+        <button class="nav-item" id="tab-btn-asesores" onclick="setTab('asesores',this)" data-tab="asesores">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>
+          <span>Asesores</span>
+        </button>
+        <button class="nav-item" onclick="setTab('captaciones',this)" data-tab="captaciones">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/></svg>
+          <span>Captaciones</span>
+        </button>
+        <button class="nav-item" onclick="setTab('visitasdb',this)" data-tab="visitasdb">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+          <span>Base de visitas</span>
+        </button>
+        <button class="nav-item" onclick="setTab('busquedas',this)" data-tab="busquedas">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <span>Búsquedas activas</span>
+        </button>
+
+        <div class="nav-divider"></div>
+
+        <button class="nav-item" id="tab-btn-stats" onclick="setTab('stats',this)" data-tab="stats">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          <span>Estadísticas</span>
+        </button>
+        <button class="nav-item" onclick="setTab('tareas',this)" data-tab="tareas">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><polyline points="3 6 4 7 6 5"/><polyline points="3 12 4 13 6 11"/><polyline points="3 18 4 19 6 17"/></svg>
+          <span>Mi día</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-footer" id="user-pill" style="display:none;">
+        <div class="sidebar-user">
+          <div class="sidebar-avatar" id="sidebar-avatar">LS</div>
+          <div class="sidebar-user-info">
+            <span class="sidebar-user-name" id="user-name"></span>
+            <span class="sidebar-user-role" id="sidebar-role">Asesor</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;margin-left:auto;">
+            <button id="dark-toggle" onclick="toggleDarkMode()" title="Modo oscuro" style="height:26px;width:26px;border:1px solid var(--border);border-radius:50%;background:var(--surface);cursor:pointer;font-size:13px;display:none;">🌙</button>
+            <span class="save-dot" id="save-dot" title="Sincronizado"></span>
+            <button class="logout-btn" onclick="doLogout()">Salir</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main content -->
+    <div class="main-content">
+      <div class="app">
   <div id="tab-props">
     <div class="toolbar">
       <input id="search" placeholder="Buscar dirección o propietario..." oninput="renderGrid()"/>
@@ -1093,8 +1221,7 @@ function filtered(){
 
 function updAsesorSel(){
   const s = document.getElementById('filt-asesor'); if(!s) return;
-  // Hide asesor filter for non-admins (they only see their own)
-  s.style.display = isAdmin() ? '' : 'none';
+  s.style.display = '';
   const v = s.value;
   s.innerHTML = '<option value="">Todos los asesores</option>' +
     asesores.map(a => '<option value="'+a.id+'">'+a.name+'</option>').join('');
@@ -1114,6 +1241,23 @@ function updStats(){
   if(asesorTab) asesorTab.style.display = isAdmin() ? '' : 'none';
   var statsTab = document.getElementById('tab-btn-stats');
   if(statsTab) statsTab.style.display = isAdmin() ? '' : 'none';
+  // Update sidebar role
+  var roleEl = document.getElementById('sidebar-role');
+  if(roleEl) roleEl.textContent = isAdmin() ? 'Admin' : 'Asesor';
+  // Update avatar initials
+  var avatarEl = document.getElementById('sidebar-avatar');
+  if(avatarEl && currentUserEmail){
+    var parts = currentUserEmail.split('@')[0].split('.');
+    var initials = parts.map(function(p){return p[0]||'';}).join('').toUpperCase().substring(0,2);
+    avatarEl.textContent = initials;
+  }
+  // Update props badge
+  var badge = document.getElementById('nav-badge-props');
+  if(badge){
+    var cnt = props.filter(function(p){return !p.finalizada;}).length;
+    badge.textContent = cnt;
+    badge.className = 'nav-badge' + (cnt>0?' visible':'');
+  }
 
 
 
@@ -4549,6 +4693,7 @@ function initAuthListener(){
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('main-app').style.display = '';
     document.getElementById('user-pill').style.display = 'flex';
+    document.getElementById('sidebar').style.visibility = 'visible';
     document.getElementById('dark-toggle').style.display = 'flex';
     document.getElementById('user-name').textContent = name;
     startSync();
@@ -4776,6 +4921,9 @@ renderGrid();
 renderDetail();
 
 </script>
+    </div><!-- /app -->
+  </div><!-- /main-content -->
+</div><!-- /app-shell -->
 </div><!-- /main-app -->
 </body>
 </html>
