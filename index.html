@@ -529,7 +529,7 @@ function mkProp(id, d){
     aptoBanco:d.aptoBanco||false, cartel:d.cartel||false,
     publicacion:d.publicacion||'Simple', observaciones:d.observaciones||'',
     ingreso:d.ingreso||'', ult:d.ult||'',
-    tasks, lastOpen:Date.now(), finalizada:false, fechaFin:'', lastContacto:'', visitas:[], fechaVencAuth:'', docs:{boleto:false,escritura:false,planoObra:false,planoPH:false,reglamento:false}
+    tasks, lastOpen:Date.now(), finalizada:false, fechaFin:'', lastContacto:'', visitas:[], fechaVencAuth:'', fotosDrive:'', docs:{boleto:false,escritura:false,planoObra:false,planoPH:false,reglamento:false}
   };
 }
 
@@ -698,6 +698,13 @@ function guardadoManual(pid){
       setTimeout(function(){ ind.style.display = 'none'; }, 300);
     }, 2000);
   }
+}
+
+function saveFotosDrive(pid, val){
+  var p = props.find(function(x){return x.id===pid;}); if(!p) return;
+  p.fotosDrive = val.trim();
+  saveProp(p);
+  renderDetail();
 }
 
 function savePubField(pid, val){
@@ -1308,7 +1315,10 @@ function cardHTML(p){
 
     '<div class="pcard-ingreso" style="display:flex;justify-content:space-between;">'+
       '<span>Ingreso: '+(p.ingreso||'—')+'</span>'+
-      (p.visitas&&p.visitas.length>0?'<span style="font-size:10px;color:#185FA5;font-weight:600;">👁 '+p.visitas.length+' visita'+(p.visitas.length!==1?'s':'')+'</span>':'')+
+      '<span style="display:flex;align-items:center;gap:6px;">'+
+        (p.visitas&&p.visitas.length>0?'<span style="font-size:10px;color:#185FA5;font-weight:600;">👁 '+p.visitas.length+'</span>':'')+
+        (p.fotosDrive?'<span style="font-size:12px;" title="Tiene fotos en Drive">📷</span>':'')+
+      '</span>'+
     '</div>'+
     '<div class="prog-lbl"><span>avance</span><span>'+pc+'%</span></div>'+
     '<div class="pcard-bar"><div class="pcard-fill" style="width:'+pc+'%;background:'+(p.finalizada?'#1D9E75':s.fill)+';"></div></div>'+
@@ -2006,6 +2016,20 @@ function renderCompradorDetail(){
       'title="Resumen para WhatsApp">📋 Resumen</button>'+
       (p.tokkoUrl ? '<a href="'+p.tokkoUrl+'" target="_blank" onclick="event.stopPropagation()" '+
       'style="margin-top:4px;height:28px;padding:0 10px;font-size:11px;font-weight:600;border-radius:8px;font-family:inherit;border:1px solid #185FA5;background:#E6F1FB;color:#0C447C;text-decoration:none;display:flex;align-items:center;white-space:nowrap;">Ver en Tokko ↗</a>' : '')+
+      // Fotos Drive button
+      '<div style="margin-top:4px;display:flex;align-items:center;gap:4px;">'+
+        (p.fotosDrive ?
+          '<a href="'+p.fotosDrive+'" target="_blank" onclick="event.stopPropagation()" '+
+          'style="height:28px;padding:0 10px;font-size:11px;font-weight:600;border-radius:8px;font-family:inherit;border:1px solid #0F6E56;background:#E1F5EE;color:#085041;text-decoration:none;display:flex;align-items:center;gap:4px;white-space:nowrap;">📷 Ver fotos</a>'
+        : '')+
+        '<input type="text" placeholder="📷 Link carpeta de fotos" value="'+p.fotosDrive+'" '+
+        'id="fotos-inp-'+p.id+'" '+
+        'style="height:28px;padding:0 8px;font-size:11px;border:1px solid #ddd;border-radius:8px;background:#fff;color:#1a1a1a;outline:none;width:'+(p.fotosDrive?'0px;opacity:0;margin:0;padding:0;':'130px;')+'font-family:inherit;transition:width .2s;" '+
+        'onfocus="this.style.width=\'160px\';this.style.opacity=\'1\'" '+
+        'onblur="if(!this.value)this.style.width=\'130px\'" '+
+        'onchange="saveFotosDrive('+p.id+',this.value)" '+
+        'onclick="event.stopPropagation()"/>'+
+      '</div>'+
     '</div>'+
   '</div>';
 
@@ -4046,6 +4070,20 @@ function renderDetail(){
       'title="Resumen para WhatsApp">📋 Resumen</button>'+
       (p.tokkoUrl ? '<a href="'+p.tokkoUrl+'" target="_blank" onclick="event.stopPropagation()" '+
       'style="margin-top:4px;height:28px;padding:0 10px;font-size:11px;font-weight:600;border-radius:8px;font-family:inherit;border:1px solid #185FA5;background:#E6F1FB;color:#0C447C;text-decoration:none;display:flex;align-items:center;white-space:nowrap;">Ver en Tokko ↗</a>' : '')+
+      // Fotos Drive button
+      '<div style="margin-top:4px;display:flex;align-items:center;gap:4px;">'+
+        (p.fotosDrive ?
+          '<a href="'+p.fotosDrive+'" target="_blank" onclick="event.stopPropagation()" '+
+          'style="height:28px;padding:0 10px;font-size:11px;font-weight:600;border-radius:8px;font-family:inherit;border:1px solid #0F6E56;background:#E1F5EE;color:#085041;text-decoration:none;display:flex;align-items:center;gap:4px;white-space:nowrap;">📷 Ver fotos</a>'
+        : '')+
+        '<input type="text" placeholder="📷 Link carpeta de fotos" value="'+p.fotosDrive+'" '+
+        'id="fotos-inp-'+p.id+'" '+
+        'style="height:28px;padding:0 8px;font-size:11px;border:1px solid #ddd;border-radius:8px;background:#fff;color:#1a1a1a;outline:none;width:'+(p.fotosDrive?'0px;opacity:0;margin:0;padding:0;':'130px;')+'font-family:inherit;transition:width .2s;" '+
+        'onfocus="this.style.width=\'160px\';this.style.opacity=\'1\'" '+
+        'onblur="if(!this.value)this.style.width=\'130px\'" '+
+        'onchange="saveFotosDrive('+p.id+',this.value)" '+
+        'onclick="event.stopPropagation()"/>'+
+      '</div>'+
     '</div>'+
   '</div>';
 
@@ -4720,6 +4758,14 @@ function initAuthListener(){
     document.getElementById('login-screen').style.display = 'flex';
     document.getElementById('main-app').style.display = 'none';
     document.getElementById('user-pill').style.display = 'none';
+    // Reset login button state
+    var btn = document.querySelector('.login-btn');
+    if(btn){ btn.textContent = 'Ingresar'; btn.disabled = false; }
+    // Clear inputs to prevent autocomplete ghost login
+    var emailEl = document.getElementById('login-email');
+    var passEl  = document.getElementById('login-pass');
+    if(emailEl) emailEl.value = '';
+    if(passEl)  passEl.value  = '';
   }
   });
 }
