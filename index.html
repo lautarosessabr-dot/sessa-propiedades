@@ -3605,9 +3605,7 @@ function diasRestantesCap(c){
 function renovarCap(id){
   var c = captaciones.find(function(x){return x.id===id;}); if(!c) return;
   c.createdAt = Date.now();
-  if(syncTimeout) clearTimeout(syncTimeout);
-  syncTimeout = null;
-  saveSharedMeta();
+  saveCap(c);
   renderCaptaciones();
   renderCapDetail();
 }
@@ -3618,9 +3616,7 @@ function cerrarCap(id, estadoCode){
   var estado = estados[estadoCode] || 'activa';
   c.estado = estado;
   activeCap = null;
-  if(syncTimeout) clearTimeout(syncTimeout);
-  syncTimeout = null;
-  saveSharedMeta();
+  saveCap(c);
   renderCaptaciones();
   renderCapDetail();
 }
@@ -3630,16 +3626,14 @@ function eliminarCap(id){
   if(isAdmin()){
     if(!confirm('¿Eliminar permanentemente esta captación?')) return;
     captaciones = captaciones.filter(function(x){return x.id!==id;});
+    deleteCapDoc(id);
     if(activeCap===id) activeCap=null;
   } else {
     if(!confirm('¿Archivar esta captación?')) return;
     var c = captaciones.find(function(x){return x.id===id;});
-    if(c) c.estado='perdida';
+    if(c){ c.estado='perdida'; saveCap(c); }
     if(activeCap===id) activeCap=null;
   }
-  if(syncTimeout) clearTimeout(syncTimeout);
-  syncTimeout = null;
-  saveSharedMeta();
   renderCaptaciones();
   renderCapDetail();
 }
@@ -3663,23 +3657,19 @@ function saveNewCaptacion(){
     if(found){ asesorId=found.id; asesorName=found.name; }
   }
   var nid = nextCapId++;
-  captaciones.unshift(mkCaptacion(nid, {
+  var newCap = mkCaptacion(nid, {
     nombre:   nombre,
     telefono: document.getElementById('cap-tel').value.trim(),
     mail:     document.getElementById('cap-mail').value.trim(),
     comentarios: document.getElementById('cap-comentarios').value.trim(),
     asesorId: asesorId,
     asesorName: asesorName,
-  }));
+  });
+  captaciones.unshift(newCap);
   activeCap = nid;
   closeCapModal();
-  // Save immediately — don't wait for debounce
-  if(syncTimeout) clearTimeout(syncTimeout);
-  syncTimeout = null;
-  saveSharedMeta();
-  if(syncTimeout) clearTimeout(syncTimeout);
-  syncTimeout = null;
-  saveSharedMeta();
+  saveCap(newCap);
+  saveMeta();
   renderCaptaciones();
   renderCapDetail();
 }
@@ -3720,8 +3710,7 @@ function saveCaptacionField(id, fieldCode, val){
   var c = captaciones.find(function(x){return x.id===id;}); if(!c) return;
   var fields = {1:'telefono', 2:'mail', 3:'comentarios'};
   var field = fields[fieldCode];
-  if(field) c[field] = val;
-  scheduleSave();
+  if(field){ c[field] = val; saveCap(c); }
 }
 
 function renderCaptaciones(){
