@@ -1210,7 +1210,7 @@ function toggle(pid, eid, tid){
 function setValor(pid, val){
   const p = props.find(x=>x.id===pid); if(!p) return;
   const t = p.tasks['cierre'].find(x=>x.id==='c_valor');
-  if(t){ t.valor = val; saveProp(p); }
+  if(t){ t.valor = val; saveProp(p); showSaveToast('✅ Guardado'); }
 }
 function setDias(pid, val){
   const p = props.find(function(x){return x.id===pid;}); if(!p) return;
@@ -2706,6 +2706,31 @@ function getCatInfo(id){
   return TAREAS_CATS.find(function(c){return c.id===id;}) || {label:id,color:'#888',bg:'#eee'};
 }
 
+function guardarMiDia(){
+  saveMiDia();
+  showSaveToast('✅ Mi día guardado');
+  // Flash button green
+  var btn = document.querySelector('#tab-tareas button[onclick="guardarMiDia()"]');
+  if(btn){
+    btn.textContent = '✅ Guardado';
+    btn.style.background = '#0F6E56';
+    setTimeout(function(){ btn.textContent = '💾 Guardar'; btn.style.background = '#185FA5'; }, 2000);
+  }
+}
+
+function abrirEnCalendar(texto){
+  // Build Google Calendar URL with task pre-filled for today
+  var hoy = new Date();
+  // Format: YYYYMMDD for all-day event
+  var pad = function(n){ return String(n).padStart(2,'0'); };
+  var fecha = hoy.getFullYear()+pad(hoy.getMonth()+1)+pad(hoy.getDate());
+  var manana = new Date(hoy); manana.setDate(manana.getDate()+1);
+  var fechaFin = manana.getFullYear()+pad(manana.getMonth()+1)+pad(manana.getDate());
+  var titulo = encodeURIComponent(texto);
+  var detalle = encodeURIComponent('Tarea de Sessa Propiedades');
+  return 'https://calendar.google.com/calendar/r/eventedit?text='+titulo+'&dates='+fecha+'/'+fechaFin+'&details='+detalle;
+}
+
 function renderTareas(){
   var el = document.getElementById('tareas-content'); if(!el) return;
 
@@ -2797,6 +2822,8 @@ function renderTareas(){
       '</div>'+
       '<span data-tid="'+t.id+'" onclick="tareaCbClick(this)" style="flex:1;font-size:13px;color:#1a1a1a;'+(t.done?'text-decoration:line-through;':'')+'cursor:pointer;">'+t.text+'</span>'+
       '<span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;background:'+cat.bg+';color:'+cat.color+';">'+cat.label+'</span>'+
+      '<a href="#" data-task="'+encodeURIComponent(t.text)+'" onclick="event.preventDefault();event.stopPropagation();window.open(abrirEnCalendar(decodeURIComponent(this.dataset.task)),\'_blank\')" title="Agregar a Google Calendar" '+
+      'style="font-size:14px;text-decoration:none;color:var(--accent);padding:2px 6px;border:1px solid var(--border);border-radius:6px;background:var(--surface);margin-left:4px;" >📅</a>'+
       (t.custom?'<button data-tid="'+t.id+'" onclick="tareaDelClick(this)" style="font-size:11px;color:#ccc;background:none;border:none;cursor:pointer;padding:0 2px;line-height:1;" title="Eliminar">✕</button>':'')+
     '</div>';
   }
@@ -5061,7 +5088,8 @@ function renderDetail(){
           '<div class="cb" style="'+cbStyle+'">'+cbInner+'</div>'+
           '<span class="ttext">Acordar valor de escrituración:</span>'+
           '<input class="field-inp" type="text" placeholder="ej: USD 85.000" value="'+t.valor+'" '+
-          'oninput="setValor('+p.id+',this.value);updateCbByInput(this,\'#1D9E75\')" '+
+          'onchange="setValor('+p.id+',this.value);updateCbByInput(this,\'#1D9E75\')" '+
+          'onkeydown="if(event.key===\'Enter\')this.blur()" '+
           'onclick="event.stopPropagation()"/>'+
           '</div>';
 
