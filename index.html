@@ -448,12 +448,17 @@ body.dark #dark-toggle{background:#333;border-color:#444;color:#fff;}display:inl
     <div id="prop-detail"></div>
   </div>
   <div id="tab-compradores" style="display:none;">
-    <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
-      <button class="btn btn-primary" onclick="openModal('comprador')">+ Nuevo comprador</button>
-    </div>
     <div id="modal-comprador-area"></div>
-    <div id="comprador-list-el"></div>
-    <div id="comprador-detail"></div>
+    <div style="display:flex;gap:0;align-items:flex-start;">
+      <div style="flex:1;min-width:0;">
+        <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
+          <input id="comp-search-inp" type="text" placeholder="Buscar comprador..." oninput="renderCompradores()" style="flex:1;height:36px;padding:0 12px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);outline:none;font-family:inherit;margin-right:8px;"/>
+          <button class="btn btn-primary" onclick="openModal('comprador')">+ Nuevo comprador</button>
+        </div>
+        <div id="comprador-list-el"></div>
+      </div>
+      <div id="comprador-detail" style="width:420px;flex-shrink:0;margin-left:20px;position:sticky;top:20px;"></div>
+    </div>
   </div>
 
   <div id="tab-busquedas" style="display:none;">
@@ -710,6 +715,15 @@ function guardarVisita(pid){
 function guardadoManualComp(cid){
   var c = compradores.find(function(x){ return x.id===cid; }); if(!c) return;
   saveComp(c);
+  showSaveToast('✅ Guardado correctamente');
+  var btns = document.querySelectorAll('[data-cid="'+cid+'"]');
+  btns.forEach(function(btn){
+    if(btn.textContent.includes('Guardar')){
+      btn.textContent = '✅ Guardado';
+      btn.style.background = '#0F6E56';
+      setTimeout(function(){ btn.textContent = '💾 Guardar'; btn.style.background = '#185FA5'; }, 2000);
+    }
+  });
 }
 
 function guardadoManual(pid){
@@ -2025,10 +2039,14 @@ function saveComprador(){
     observaciones:document.getElementById('fc-obs').value.trim(),
   };
   var nid = nextCid++;
-  compradores.push(mkComprador(nid, d));
+  var newC = mkComprador(nid, d);
+  compradores.push(newC);
+  saveComp(newC);
+  saveMeta();
   activeComprador = nid;
   closeModal('comprador');
   renderCompradores();
+  renderCompradorDetail();
 }
 
 function saveAsesor(){
@@ -5817,7 +5835,7 @@ function startSync(){
     compradores.forEach(function(c){ if(c.id >= nextCid) nextCid = c.id + 1; });
     _remoteUpdate = false;
     _renderCompradoresOnly();
-    if(activeComprador) renderCompradorDetail();
+    renderCompradorDetail();
   });
   unsubscribers.push(unsubComp);
 
