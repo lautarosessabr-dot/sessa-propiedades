@@ -5033,20 +5033,9 @@ function renderAsesores(){
   const el = document.getElementById('asesor-list-el'); if(!el) return;
   if(!asesores.length){ el.innerHTML='<div class="no-sel">No hay asesores.</div>'; return; }
   el.innerHTML = '<div class="asesor-list">'+asesores.map(function(a){
-    // Count props by asesorId OR by tokkoProducerName match
-    var aName = a.name.trim().toLowerCase();
-    var cnt = props.filter(function(p){
-      if(p.finalizada) return false;
-      if(p.asesorId===a.id) return true;
-      var tk=(p.tokkoProducerName||'').trim().toLowerCase();
-      return tk && tk===aName;
-    }).length;
-    var fin = props.filter(function(p){
-      if(!p.finalizada) return false;
-      if(p.asesorId===a.id) return true;
-      var tk=(p.tokkoProducerName||'').trim().toLowerCase();
-      return tk && tk===aName;
-    }).length;
+    // Count props by asesorId only
+    var cnt = props.filter(function(p){ return !p.finalizada && p.asesorId===a.id; }).length;
+    var fin = props.filter(function(p){ return p.finalizada && p.asesorId===a.id; }).length;
     var emailVal = a.email||'';
     var missingEmail = !emailVal;
     return '<div class="asesor-row" style="flex-direction:column;align-items:stretch;gap:10px;">'+
