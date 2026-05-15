@@ -4544,6 +4544,137 @@ function cambiarEstadoBusqueda(bid, estado){
 }
 
 
+
+// ── TASADOR IA ───────────────────────────────────────────────────────────────
+
+function renderTasador(){
+  var el = document.getElementById('tasador-content'); if(!el) return;
+  el.innerHTML = '';
+  var wrap = document.createElement('div');
+  wrap.style.cssText = 'max-width:700px;';
+  var header = document.createElement('div');
+  header.innerHTML = '<h2 style="font-size:20px;font-weight:700;color:var(--text);margin-bottom:6px;">🏷️ Tasador IA</h2><p style="font-size:13px;color:var(--text3);margin-bottom:20px;">Consultamos 3 fuentes: tu cartera, Tokko y la IA.</p>';
+  wrap.appendChild(header);
+  var form = document.createElement('div');
+  form.style.cssText='background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;margin-bottom:16px;';
+  form.innerHTML =
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">'+
+    '<div class="form-group"><label>Tipo *</label><select id="tas-tipo"><option value="">Seleccioná...</option>'+['Casa','Dpto','PH','Monoambiente','Lote','Galpon','Local'].map(function(t){return'<option>'+t+'</option>';}).join('')+'</select></div>'+
+    '<div class="form-group"><label>Zona *</label><input id="tas-zona" type="text" placeholder="ej: City Bell, 44 y 8"/></div>'+
+    '<div class="form-group"><label>Sup. cubierta (m²)</label><input id="tas-sup" type="number" placeholder="65"/></div>'+
+    '<div class="form-group"><label>Sup. total (m²)</label><input id="tas-suptot" type="number" placeholder="120"/></div>'+
+    '<div class="form-group"><label>Dormitorios</label><select id="tas-dorms"><option value="">—</option>'+['Monoambiente','1','2','3','4','5+'].map(function(d){return'<option>'+d+'</option>';}).join('')+'</select></div>'+
+    '<div class="form-group"><label>Baños</label><select id="tas-banos"><option value="">—</option>'+['1','2','3','4+'].map(function(b){return'<option>'+b+'</option>';}).join('')+'</select></div>'+
+    '<div class="form-group"><label>Antigüedad</label><select id="tas-antig"><option value="">—</option>'+['A estrenar','Menos de 5 años','5-15 años','15-30 años','Más de 30 años'].map(function(a){return'<option>'+a+'</option>';}).join('')+'</select></div>'+
+    '<div class="form-group"><label>Estado</label><select id="tas-estado"><option value="">—</option>'+['Excelente','Muy bueno','Bueno','Regular','A refaccionar'].map(function(e){return'<option>'+e+'</option>';}).join('')+'</select></div>'+
+    '</div>'+
+    '<div class="form-group" style="margin-bottom:14px;"><label>Características</label><textarea id="tas-extras" rows="2" placeholder="cochera, jardín, apto banco..." style="width:100%;font-size:13px;padding:8px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface2);color:var(--text);outline:none;font-family:inherit;resize:vertical;"></textarea></div>'+
+    '<div class="form-group"><label>Moneda</label><select id="tas-moneda" style="width:140px;"><option value="USD">USD</option><option value="ARS">ARS</option></select></div>';
+  wrap.appendChild(form);
+  var runBtn = document.createElement('button');
+  runBtn.id='tas-btn'; runBtn.textContent='🏷️ Tasar propiedad';
+  runBtn.style.cssText='height:40px;padding:0 24px;font-size:14px;font-weight:700;border:none;border-radius:var(--radius-sm);background:var(--accent);color:#fff;cursor:pointer;font-family:inherit;margin-bottom:20px;';
+  runBtn.onclick=ejecutarTasacion;
+  wrap.appendChild(runBtn);
+  var result=document.createElement('div'); result.id='tas-result';
+  wrap.appendChild(result);
+  el.appendChild(wrap);
+}
+
+async function ejecutarTasacion(){
+  var tipo=((document.getElementById('tas-tipo')||{}).value||'');
+  var zona=((document.getElementById('tas-zona')||{}).value||'').trim();
+  if(!tipo||!zona){alert('Completá tipo y zona');return;}
+  var sup=(document.getElementById('tas-sup')||{}).value||'';
+  var dorms=(document.getElementById('tas-dorms')||{}).value||'';
+  var banos=(document.getElementById('tas-banos')||{}).value||'';
+  var antig=(document.getElementById('tas-antig')||{}).value||'';
+  var estado=(document.getElementById('tas-estado')||{}).value||'';
+  var extras=((document.getElementById('tas-extras')||{}).value||'').trim();
+  var moneda=(document.getElementById('tas-moneda')||{}).value||'USD';
+  var sym=moneda==='USD'?'U$D':'$';
+  var btn=document.getElementById('tas-btn');
+  var res=document.getElementById('tas-result');
+  if(btn){btn.textContent='⏳ Consultando...';btn.disabled=true;}
+  res.innerHTML=
+    '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:12px;">'+
+    '<div id="tc1" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;opacity:.5;"><div style="font-size:10px;font-weight:700;color:#534AB7;text-transform:uppercase;margin-bottom:8px;">📁 Tu cartera</div><div style="font-size:12px;color:var(--text3);">Analizando...</div></div>'+
+    '<div id="tc2" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;opacity:.5;"><div style="font-size:10px;font-weight:700;color:#185FA5;text-transform:uppercase;margin-bottom:8px;">🔄 Tokko</div><div style="font-size:12px;color:var(--text3);">Consultando...</div></div>'+
+    '<div id="tc3" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;opacity:.5;"><div style="font-size:10px;font-weight:700;color:#0F6E56;text-transform:uppercase;margin-bottom:8px;">✨ IA Groq</div><div style="font-size:12px;color:var(--text3);">Procesando...</div></div>'+
+    '</div>';
+
+  function setCard(id,color,title,precio,sub,rango,nota){
+    var c=document.getElementById(id);if(!c)return;
+    c.style.opacity='1';c.style.borderColor=color;
+    c.innerHTML='<div style="font-size:10px;font-weight:700;color:'+color+';text-transform:uppercase;margin-bottom:8px;">'+title+'</div>'+
+      '<div style="font-size:24px;font-weight:800;color:'+color+';margin-bottom:4px;">'+precio+'</div>'+
+      '<div style="font-size:11px;color:var(--text3);margin-bottom:6px;">'+sub+'</div>'+
+      (rango?'<div style="font-size:11px;color:var(--text2);">'+rango+'</div>':'')+
+      (nota?'<div style="font-size:10px;color:var(--text3);margin-top:6px;">'+nota+'</div>':'');
+  }
+  function errCard(id,color,title,msg){
+    var c=document.getElementById(id);if(!c)return;
+    c.style.opacity='1';
+    c.innerHTML='<div style="font-size:10px;font-weight:700;color:'+color+';text-transform:uppercase;margin-bottom:8px;">'+title+'</div><div style="font-size:12px;color:var(--text3);">'+msg+'</div>';
+  }
+
+  // Cartera
+  var sims=props.filter(function(p){
+    if(p.finalizada||!p.precio)return false;
+    var mt=p.tipo&&p.tipo.toLowerCase()===tipo.toLowerCase();
+    var mz=zona&&((p.addr||'').toLowerCase().includes(zona.split(' ')[0].toLowerCase())||(p.observaciones||'').toLowerCase().includes(zona.split(' ')[0].toLowerCase()));
+    return mt||mz;
+  });
+  var prs=sims.map(function(p){return parseFloat((p.precio||'').replace(/[^0-9.]/g,''));}).filter(function(n){return !isNaN(n)&&n>0;});
+  if(prs.length){
+    var avg=Math.round(prs.reduce(function(a,b){return a+b;},0)/prs.length);
+    setCard('tc1','#534AB7','📁 Tu cartera',sym+' '+avg.toLocaleString('es-AR'),'Promedio de '+prs.length+' similares','Rango: '+sym+' '+Math.min.apply(null,prs).toLocaleString('es-AR')+' — '+sym+' '+Math.max.apply(null,prs).toLocaleString('es-AR'),sims.slice(0,2).map(function(p){return p.addr;}).join(' · '));
+  } else {errCard('tc1','#534AB7','📁 Tu cartera','Sin similares en cartera');}
+
+  // Tokko
+  try{
+    var tr=await fetch('https://www.tokkobroker.com/api/v1/property/?key=a816281c7b5e042cf4b63ce93dae3b4ff5817c7e&format=json&limit=100&lang=es_ar&current_status=2');
+    var td=await tr.json();
+    var ti=(td.objects||[]).filter(function(t){
+      var tt=(t.type&&t.type.name||'').toLowerCase();
+      return tt.includes(tipo.toLowerCase())||tipo.toLowerCase().includes(tt.split(' ')[0])||
+             zona&&(t.address||'').toLowerCase().includes(zona.split(' ')[0].toLowerCase());
+    });
+    var tp=ti.map(function(t){var op=t.operations&&t.operations[0];if(!op)return null;var pr=op.prices&&op.prices[0];if(!pr)return null;if(moneda==='USD'&&pr.currency!=='USD')return null;return parseFloat(pr.price)||null;}).filter(Boolean);
+    if(tp.length){
+      var tavg=Math.round(tp.reduce(function(a,b){return a+b;},0)/tp.length);
+      setCard('tc2','#185FA5','🔄 Tokko',sym+' '+tavg.toLocaleString('es-AR'),'Promedio de '+tp.length+' en Tokko','Rango: '+sym+' '+Math.min.apply(null,tp).toLocaleString('es-AR')+' — '+sym+' '+Math.max.apply(null,tp).toLocaleString('es-AR'),'Solo tu cuenta Tokko');
+    } else {errCard('tc2','#185FA5','🔄 Tokko','Sin similares en Tokko');}
+  }catch(e){errCard('tc2','#185FA5','🔄 Tokko','Error al consultar');}
+
+  // IA
+  try{
+    var nl='\n';var pr='Tasá en '+moneda+' para La Plata/City Bell 2025/2026.'+nl+'Tipo: '+tipo+nl+'Zona: '+zona+(sup?nl+'Sup: '+sup+'m²':'')+(dorms?nl+'Dorm: '+dorms:'')+(banos?nl+'Baños: '+banos:'')+(antig?nl+'Antig: '+antig:'')+(estado?nl+'Estado: '+estado:'')+(extras?nl+'Extras: '+extras:'')+nl+nl+'Responde SOLO:'+nl+'PRECIO_MIN: [numero]'+nl+'PRECIO_MAX: [numero]'+nl+'PRECIO_SUGERIDO: [numero]'+nl+'FUNDAMENTO: [oracion]';
+    var ir=await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer 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'},body:JSON.stringify({model:'llama-3.3-70b-versatile',max_tokens:150,messages:[{role:'user',content:pr}]})});
+    var id=await ir.json();
+    var it=id.choices&&id.choices[0]?id.choices[0].message.content:'';
+    var sm=it.match(/PRECIO_SUGERIDO:\s*([0-9]+)/);
+    var nm=it.match(/PRECIO_MIN:\s*([0-9]+)/);
+    var xm=it.match(/PRECIO_MAX:\s*([0-9]+)/);
+    var fm=it.match(/FUNDAMENTO:\s*(.+)/);
+    if(sm){
+      var ps=parseInt(sm[1]);
+      setCard('tc3','#0F6E56','✨ IA Groq',sym+' '+ps.toLocaleString('es-AR'),'Precio sugerido de publicación',nm&&xm?'Rango: '+sym+' '+parseInt(nm[1]).toLocaleString('es-AR')+' — '+sym+' '+parseInt(xm[1]).toLocaleString('es-AR'):'',fm?fm[1].trim():'');
+      window._lastTasacion='Tasacion: '+tipo+' en '+zona;
+    } else {errCard('tc3','#0F6E56','✨ IA Groq',it.substring(0,100));}
+  }catch(e){errCard('tc3','#0F6E56','✨ IA Groq','Error: '+e.message);}
+
+  var actns=document.createElement('div');actns.style.cssText='display:flex;gap:8px;margin-top:4px;';
+  actns.innerHTML='<button onclick="copiarTasacion()" style="height:32px;padding:0 14px;font-size:12px;font-weight:600;border:1px solid var(--accent);border-radius:var(--radius-sm);background:var(--accent-bg);color:var(--accent);cursor:pointer;font-family:inherit;">📋 Copiar</button><button onclick="renderTasador()" style="height:32px;padding:0 14px;font-size:12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text2);cursor:pointer;font-family:inherit;">🔄 Nueva tasación</button>';
+  res.appendChild(actns);
+  if(btn){btn.textContent='🏷️ Tasar propiedad';btn.disabled=false;}
+}
+
+function copiarTasacion(){
+  if(!window._lastTasacion)return;
+  navigator.clipboard.writeText(window._lastTasacion).then(function(){showSaveToast('📋 Copiado');}).catch(function(){prompt('Copiá:',window._lastTasacion);});
+}
+
 // ── ASISTENTE IA ──────────────────────────────────────────────────────────────
 
 
