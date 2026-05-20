@@ -1124,18 +1124,21 @@ async function sincronizarFotosTokko(){
   var updated = 0;
   try {
     var r = await fetch('https://www.tokkobroker.com/api/v1/property/?key=a816281c7b5e042cf4b63ce93dae3b4ff5817c7e&format=json&limit=200&lang=es_ar&current_status=2');
+    if(!r.ok) throw new Error('HTTP '+r.status);
     var data = await r.json();
     var tokkoItems = data.objects || [];
+    console.log('[Fotos] Tokko items:', tokkoItems.length);
     props.forEach(function(p){
       if(!p.tokkoId || p.finalizada) return;
       var tk = tokkoItems.find(function(t){ return String(t.id)===String(p.tokkoId); });
-      if(!tk || !tk.photos || !tk.photos.length) return;
+      if(!tk) return;
+      if(!tk.photos || !tk.photos.length){ console.log('[Fotos] Sin fotos para', p.addr); return; }
       var front = tk.photos.find(function(ph){return ph.is_front_cover;});
       var photo = front ? front.image : (tk.photos[0].image || tk.photos[0].thumb || '');
-      if(photo && photo !== p.coverPhoto){ p.coverPhoto = photo; saveProp(p); updated++; }
+      if(photo){ p.coverPhoto = photo; saveProp(p); updated++; }
     });
     renderGrid();
-    showSaveToast('🖼 '+updated+' foto'+(updated!==1?'s':'')+' actualizada'+(updated!==1?'s':''));
+    alert('🖼 '+updated+' foto'+(updated!==1?'s':'')+' actualizada'+(updated!==1?'s':'')+' de '+props.filter(function(p){return p.tokkoId&&!p.finalizada;}).length+' propiedades con Tokko ID');
   } catch(e){
     alert('Error al obtener fotos: '+e.message);
   }
@@ -5311,7 +5314,12 @@ function renderDetail(){
   // Header: dirección + fechas + % completado
   h += '<div class="det-header">'+
     '<div style="flex:1;">'+
-      '<div class="det-addr">'+(isExclusiva(p)?'<span style="color:#EF9F27;" title="Exclusiva">⭐</span> ':'')+p.addr+'</div>'+
+      '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'+
+        '<div class="det-addr">'+(isExclusiva(p)?'<span style="color:#EF9F27;" title="Exclusiva">⭐</span> ':'')+p.addr+'</div>'+
+        '<button data-pid="'+p.id+'" onclick="event.stopPropagation();toggleConstructora(parseInt(this.dataset.pid))" '+
+        'style="height:24px;padding:0 10px;font-size:11px;font-weight:600;border-radius:20px;border:none;cursor:pointer;font-family:inherit;flex-shrink:0;'+
+        (p.isConstructora?'background:#1a1a1a;color:#fff;':'background:#f0f0f0;color:#666;')+'">'+(p.isConstructora?'🏗 Constructora ✓':'🏗 Constructora')+'</button>'+
+      '</div>'+
       '<div class="det-meta" style="margin-top:6px;display:flex;flex-wrap:wrap;align-items:center;gap:10px;">'+
         '<span>'+p.tipo+'</span>'+
         '<span style="color:#ccc;">·</span>'+
