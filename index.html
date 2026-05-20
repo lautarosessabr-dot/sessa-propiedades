@@ -1134,7 +1134,7 @@ async function sincronizarFotosTokko(){
       if(!tk) return;
       if(!tk.photos || !tk.photos.length){ console.log('[Fotos] Sin fotos para', p.addr); return; }
       var front = tk.photos.find(function(ph){return ph.is_front_cover;});
-      var photo = front ? front.image : (tk.photos[0].image || tk.photos[0].thumb || '');
+      var photo = front ? (front.thumb || front.image) : (tk.photos[0].thumb || tk.photos[0].image || '');
       if(photo){ p.coverPhoto = photo; saveProp(p); updated++; }
     });
     renderGrid();
@@ -1181,8 +1181,11 @@ function toggleConstructora(pid){
   p.isConstructora = !p.isConstructora;
   saveProp(p);
   showSaveToast(p.isConstructora ? '🏗 Marcada como constructora' : '✅ Constructora removida');
-  _renderGridOnly();
-  _origRenderDetail();
+  // Re-render grid and detail
+  if(typeof _renderGridOnly === 'function') _renderGridOnly();
+  else if(typeof renderGrid === 'function') renderGrid();
+  if(typeof _origRenderDetail === 'function') _origRenderDetail();
+  else if(typeof renderDetail === 'function') renderDetail();
 }
 
 function saveFotosDrive(pid, val){
@@ -6116,7 +6119,7 @@ function confirmarImportTokko(){
     // Cover photo from Tokko
     if(tk.photos && tk.photos.length){
       var cover = tk.photos[0];
-      newProp.coverPhoto = cover.image || cover.thumb || '';
+      newProp.coverPhoto = cover.thumb || cover.image || '';
     } else if(tk.cover_photo){
       newProp.coverPhoto = tk.cover_photo;
     }
