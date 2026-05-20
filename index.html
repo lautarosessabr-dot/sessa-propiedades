@@ -1138,7 +1138,10 @@ async function sincronizarFotosTokko(){
       if(photo){ p.coverPhoto = photo; saveProp(p); updated++; }
     });
     renderGrid();
-    alert('🖼 '+updated+' foto'+(updated!==1?'s':'')+' actualizada'+(updated!==1?'s':'')+' de '+props.filter(function(p){return p.tokkoId&&!p.finalizada;}).length+' propiedades con Tokko ID');
+    // Force update local display immediately
+    renderGrid();
+    if(activeProp) _origRenderDetail();
+    alert('🖼 '+updated+' foto'+(updated!==1?'s':'')+' actualizada'+(updated!==1?'s':'')+'. Recargá la página si no las ves.');
   } catch(e){
     alert('Error al obtener fotos: '+e.message);
   }
@@ -1178,7 +1181,8 @@ function toggleConstructora(pid){
   p.isConstructora = !p.isConstructora;
   saveProp(p);
   showSaveToast(p.isConstructora ? '🏗 Marcada como constructora' : '✅ Constructora removida');
-  renderGrid(); renderDetail();
+  _renderGridOnly();
+  _origRenderDetail();
 }
 
 function saveFotosDrive(pid, val){
@@ -1786,7 +1790,8 @@ function cardHTML(p){
   const tb = p.finalizada
     ? '<span class="fin-badge">🥂 Finalizada</span>'
     : (d===null ? '<span class="inac-days" style="background:#f0ede8;color:#999;">sin contacto</span>' : '<span class="inac-days inac-'+ic+'">'+(d===0?'hoy':d+'d')+'</span>');
-  return '<div class="pcard'+(activeProp===p.id?' active':'')+(al?' alerta':'')+(p.finalizada?' finalizada':'')+'" onclick="openP('+p.id+')">'+
+  return (p.coverPhoto?'<div style="position:relative;"><img src="'+p.coverPhoto+'" style="width:100%;height:90px;object-fit:cover;border-radius:var(--radius) var(--radius) 0 0;display:block;" onerror="this.style.display=\'none\'"/></div>':'')+
+  '<div class="pcard'+(activeProp===p.id?' active':'')+(al?' alerta':'')+(p.finalizada?' finalizada':'')+(p.isConstructora?' constructora':'')+'" onclick="openP('+p.id+')" style="'+(p.coverPhoto?'border-radius:0 0 var(--radius) var(--radius);margin-top:-4px;':'')+'">'+
     '<div class="pcard-top"><span class="pcard-type">'+p.tipo+' · <span class="asesor-badge" style="background:'+a.color+'22;color:'+a.color+';">'+a.name+'</span></span>'+tb+'</div>'+
     '<div class="pcard-addr">'+(isExclusiva(p)?'<span style="color:#EF9F27;font-size:13px;" title="Exclusiva">⭐</span> ':'')+p.addr+'</div>'+
     '<div class="pcard-owner" style="display:flex;gap:6px;align-items:center;">'+
