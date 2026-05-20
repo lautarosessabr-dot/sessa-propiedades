@@ -1181,11 +1181,13 @@ function toggleConstructora(pid){
   p.isConstructora = !p.isConstructora;
   saveProp(p);
   showSaveToast(p.isConstructora ? '🏗 Marcada como constructora' : '✅ Constructora removida');
-  // Re-render grid and detail
-  if(typeof _renderGridOnly === 'function') _renderGridOnly();
-  else if(typeof renderGrid === 'function') renderGrid();
-  if(typeof _origRenderDetail === 'function') _origRenderDetail();
-  else if(typeof renderDetail === 'function') renderDetail();
+  // Rebuild the entire grid and reopen the detail
+  var grid = document.getElementById('props-grid');
+  if(grid) grid.innerHTML = '';
+  setTimeout(function(){
+    if(typeof renderGrid === 'function') renderGrid();
+    if(activeProp && typeof renderDetail === 'function') renderDetail();
+  }, 50);
 }
 
 function saveFotosDrive(pid, val){
