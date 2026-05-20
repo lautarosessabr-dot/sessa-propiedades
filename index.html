@@ -571,7 +571,7 @@ function mkProp(id, d){
     aptoBanco:d.aptoBanco||false, cartel:d.cartel||false,
     publicacion:d.publicacion||'Simple', observaciones:d.observaciones||'',
     ingreso:d.ingreso||'', ult:d.ult||'',
-    tasks, lastOpen:Date.now(), finalizada:false, fechaFin:'', lastContacto:'', visitas:[], fechaVencAuth:'', fotosDrive:'', resumenGuardado:'', comentarios:[], historialPrecios:[], activityLog:[], tags:[], docs:{boleto:false,escritura:false,planoObra:false,planoPH:false,reglamento:false}
+    tasks, lastOpen:Date.now(), finalizada:false, fechaFin:'', lastContacto:'', visitas:[], fechaVencAuth:'', fotosDrive:'', resumenGuardado:'', comentarios:[], historialPrecios:[], activityLog:[], tags:[], isConstructora:false, docs:{boleto:false,escritura:false,planoObra:false,planoPH:false,reglamento:false}
   };
 }
 
@@ -801,7 +801,9 @@ async function sincronizarPreciosTokko(){
             '<div style="font-size:11px;color:#888;">'+p.tipo+' · '+(p.tokkoProducerName||'')+'</div>'+
           '</div>'+
           '<button data-pid="'+p.id+'" onclick="marcarBaja(parseInt(this.dataset.pid),this)" '+
-          'style="height:26px;padding:0 10px;font-size:11px;font-weight:600;border:1px solid #A32D2D;border-radius:6px;background:#fff;color:#A32D2D;cursor:pointer;font-family:inherit;">Marcar cerrada</button>'+
+          'style="height:26px;padding:0 10px;font-size:11px;font-weight:600;border:1px solid #0F6E56;border-radius:6px;background:#E1F5EE;color:#085041;cursor:pointer;font-family:inherit;">✅ Venta/cierre</button>'+
+          '<button data-pid="'+p.id+'" onclick="marcarNoDisponible(parseInt(this.dataset.pid),this)" '+
+          'style="height:26px;padding:0 10px;font-size:11px;font-weight:600;border:1px solid #854F0B;border-radius:6px;background:#FAEEDA;color:#633806;cursor:pointer;font-family:inherit;">📤 No disponible</button>'+
           '<button data-pid="'+p.id+'" onclick="ignorarBaja(parseInt(this.dataset.pid),this)" '+
           'style="height:26px;padding:0 10px;font-size:11px;font-weight:600;border:1px solid #ddd;border-radius:6px;background:#fff;color:#888;cursor:pointer;font-family:inherit;">Ignorar</button>'+
         '</div>';
@@ -853,6 +855,20 @@ function marcarBaja(pid, btn){
   var row = btn.closest('div[style*="FCEBEB"]');
   if(row){ row.style.opacity='.5'; row.style.pointerEvents='none'; }
   showSaveToast('✅ Propiedad marcada como cerrada');
+  renderGrid();
+}
+
+function marcarNoDisponible(pid, btn){
+  var p = props.find(function(x){ return x.id===pid; }); if(!p) return;
+  if(!confirm('¿Marcar "'+p.addr+'" como no disponible? La propiedad quedará archivada sin contar como venta.')) return;
+  p.finalizada = true;
+  p.fechaFin = new Date().toLocaleDateString('es-AR');
+  p.noDisponible = true; // flag para distinguir de venta
+  addActivityLog(p, 'Marcada como no disponible (baja en Tokko)');
+  saveProp(p);
+  var row = btn.closest('div[style*="FCEBEB"]');
+  if(row){ row.style.opacity='.5'; row.style.pointerEvents='none'; }
+  showSaveToast('📤 Propiedad marcada como no disponible');
   renderGrid();
 }
 
@@ -1099,6 +1115,27 @@ function copiarLinkColega(pid, tokkoId){
     // Fallback: show the link in a prompt so user can copy manually
     prompt('Copiá el link de colega:', link);
   });
+}
+
+async function syncCoverPhoto(pid, tokkoId){
+  var p = props.find(function(x){return x.id===pid;}); if(!p||!tokkoId) return;
+  try {
+    var r = await fetch('https://www.tokkobroker.com/api/v1/property/'+tokkoId+'/?key=a816281c7b5e042cf4b63ce93dae3b4ff5817c7e&format=json&lang=es_ar');
+    var d = await r.json();
+    var photo = '';
+    if(d.photos && d.photos.length) photo = d.photos[0].image || d.photos[0].thumb || '';
+    else if(d.cover_photo) photo = d.cover_photo;
+    if(photo){ p.coverPhoto = photo; saveProp(p); renderDetail(); renderGrid(); showSaveToast('🖼 Foto de portada actualizada'); }
+    else showSaveToast('Sin fotos disponibles en Tokko');
+  } catch(e){ showSaveToast('Error al obtener foto'); }
+}
+
+function toggleConstructora(pid){
+  var p = props.find(function(x){return x.id===pid;}); if(!p) return;
+  p.isConstructora = !p.isConstructora;
+  saveProp(p);
+  showSaveToast(p.isConstructora ? '🏗 Marcada como constructora' : '✅ Constructora removida');
+  renderGrid(); renderDetail();
 }
 
 function saveFotosDrive(pid, val){
@@ -1560,7 +1597,7 @@ async function generarDescripcion(pid){
   try {
     const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method:'POST',
-      headers:{'Content-Type':'application/json','Authorization':'Bearer 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'},
+      headers:{'Content-Type':'application/json','Authorization':'Bearer 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'},
       body:JSON.stringify({
         model:'llama-3.3-70b-versatile',
         max_tokens:400,
@@ -4579,13 +4616,14 @@ function renderBusquedas(){
         '<span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:10px;background:'+es.bg+';color:'+es.color+';">'+es.dot+' '+b.estado.charAt(0).toUpperCase()+b.estado.slice(1)+'</span>'+
       '</div>'+
 
-      '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">'+
-        (b.tipo?'<span style="font-size:11px;padding:2px 8px;border-radius:10px;background:#E6F1FB;color:#0C447C;font-weight:600;">'+b.tipo+'</span>':'')+
-        (b.zona?'<span style="font-size:11px;padding:2px 8px;border-radius:10px;background:#f0ede8;color:#555;">📍 '+b.zona+'</span>':'')+
-        ((b.desde||b.hasta)?'<span style="font-size:11px;padding:2px 8px;border-radius:10px;background:#E1F5EE;color:#085041;">💰 '+(b.desde||'')+(b.desde&&b.hasta?' — ':b.hasta?'hasta ':'')+(b.hasta||'')+'</span>':'')+
-      '</div>'+
-
-      (b.obs?'<div style="font-size:12px;color:#666;margin-bottom:10px;line-height:1.4;">'+b.obs+'</div>':'')+
+      // Show texto (WhatsApp search text) prominently
+      (b.texto ?
+        '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:10px 12px;margin-bottom:10px;">'+
+          b.texto.split('\n').filter(function(l){return l.trim();}).map(function(line){
+            return '<div style="font-size:12px;color:#1a1a1a;line-height:1.7;">'+line+'</div>';
+          }).join('')+
+        '</div>'
+      : '')+
 
       '<div style="padding-top:10px;border-top:1px solid #f0ede8;">'+
         // Footer row
@@ -4797,7 +4835,7 @@ async function ejecutarTasacion(){
   // IA
   try{
     var nl='\n';var pr='Tasá en '+moneda+' para La Plata/City Bell 2025/2026.'+nl+'Tipo: '+tipo+nl+'Zona: '+zona+(sup?nl+'Sup: '+sup+'m²':'')+(dorms?nl+'Dorm: '+dorms:'')+(banos?nl+'Baños: '+banos:'')+(antig?nl+'Antig: '+antig:'')+(estado?nl+'Estado: '+estado:'')+(extras?nl+'Extras: '+extras:'')+nl+nl+'Responde SOLO:'+nl+'PRECIO_MIN: [numero]'+nl+'PRECIO_MAX: [numero]'+nl+'PRECIO_SUGERIDO: [numero]'+nl+'FUNDAMENTO: [oracion]';
-    var ir=await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer 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'},body:JSON.stringify({model:'llama-3.3-70b-versatile',max_tokens:150,messages:[{role:'user',content:pr}]})});
+    var ir=await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer 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'},body:JSON.stringify({model:'llama-3.3-70b-versatile',max_tokens:150,messages:[{role:'user',content:pr}]})});
     var id=await ir.json();
     var it=id.choices&&id.choices[0]?id.choices[0].message.content:'';
     var sm=it.match(/PRECIO_SUGERIDO:\s*([0-9]+)/);
@@ -4861,7 +4899,7 @@ async function ejecutarMatchBusquedas(){
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer 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'
+        'Authorization': 'Bearer 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'
       },
       body: JSON.stringify({
         model: 'llama-3.3-70b-versatile',
@@ -5029,7 +5067,7 @@ async function llamarIA(tool){
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer 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'
+        'Authorization': 'Bearer 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'
       },
       body: JSON.stringify({
         model: 'llama-3.3-70b-versatile',
@@ -5407,6 +5445,12 @@ function renderDetail(){
         '<button data-pid="'+p.id+'" onclick="event.stopPropagation();abrirFusionar(parseInt(this.dataset.pid))" '+
         'style="height:24px;padding:0 10px;font-size:10px;font-weight:600;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text2);cursor:pointer;font-family:inherit;">⇄ Fusionar</button>'+
       '</div>'+
+
+      // Sync cover photo from Tokko
+      (p.tokkoId&&!p.coverPhoto?
+        '<button data-pid="'+p.id+'" data-tid="'+p.tokkoId+'" onclick="event.stopPropagation();syncCoverPhoto(parseInt(this.dataset.pid),this.dataset.tid)" '+
+        'style="margin-top:4px;height:26px;padding:0 10px;font-size:11px;font-weight:600;border:1px solid #ddd;border-radius:6px;background:#fff;color:#555;cursor:pointer;font-family:inherit;white-space:nowrap;">🖼 Obtener foto de Tokko</button>'
+      : '')+
 
       // Fotos Drive button
       '<div style="margin-top:4px;display:flex;align-items:center;gap:4px;">'+
@@ -6016,7 +6060,15 @@ function confirmarImportTokko(){
     newProp.tokkoId = cb.dataset.id;
     newProp.tokkoProducerName = tk.producer ? tk.producer.name : '';
 
-    // Store description in the mkt_2 task if available
+    // Cover photo from Tokko
+    if(tk.photos && tk.photos.length){
+      var cover = tk.photos[0];
+      newProp.coverPhoto = cover.image || cover.thumb || '';
+    } else if(tk.cover_photo){
+      newProp.coverPhoto = tk.cover_photo;
+    }
+
+    // Store description if available
     if(tk.description){
       var mkt2 = newProp.tasks['mkt'].find(function(t){ return t.id==='mkt_2'; });
       if(mkt2){ mkt2.descripcion = tk.description; }
