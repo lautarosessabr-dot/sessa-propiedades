@@ -436,7 +436,7 @@ body.dark #dark-toggle{background:#333;border-color:#444;color:#fff;}display:inl
       <select id="filt-asesor" onchange="renderGrid()" style="height:36px;padding:0 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);outline:none;font-family:inherit;">
         <option value="">Todos los asesores</option>
       </select>
-      <button class="btn btn-primary" onclick="openModal('prop')">+ Nueva propiedad</button>
+
       <button class="btn" id="btn-tokko-import" onclick="importarDesdeTokko()" style="background:#fff;border-color:#ddd;color:#555;" title="Importar propiedades desde Tokko Broker">🔄 Importar desde Tokko</button>
       <button class="btn" onclick="sincronizarPreciosTokko()" style="background:#fff;border-color:#EF9F27;color:#854F0B;" title="Verificar cambios de precio en Tokko">💰 Sincronizar precios</button>
       <button class="btn" onclick="sincronizarFotosTokko()" style="background:#fff;border-color:#534AB7;color:#534AB7;" title="Obtener fotos de portada desde Tokko">🖼 Sync fotos</button>
@@ -1181,13 +1181,8 @@ function toggleConstructora(pid){
   p.isConstructora = !p.isConstructora;
   saveProp(p);
   showSaveToast(p.isConstructora ? '🏗 Marcada como constructora' : '✅ Constructora removida');
-  // Rebuild the entire grid and reopen the detail
-  var grid = document.getElementById('props-grid');
-  if(grid) grid.innerHTML = '';
-  setTimeout(function(){
-    if(typeof renderGrid === 'function') renderGrid();
-    if(activeProp && typeof renderDetail === 'function') renderDetail();
-  }, 50);
+  renderGrid();
+  renderDetail();
 }
 
 function saveFotosDrive(pid, val){
