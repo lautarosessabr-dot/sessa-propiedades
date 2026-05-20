@@ -439,6 +439,7 @@ body.dark #dark-toggle{background:#333;border-color:#444;color:#fff;}display:inl
       <button class="btn btn-primary" onclick="openModal('prop')">+ Nueva propiedad</button>
       <button class="btn" id="btn-tokko-import" onclick="importarDesdeTokko()" style="background:#fff;border-color:#ddd;color:#555;" title="Importar propiedades desde Tokko Broker">🔄 Importar desde Tokko</button>
       <button class="btn" onclick="sincronizarPreciosTokko()" style="background:#fff;border-color:#EF9F27;color:#854F0B;" title="Verificar cambios de precio en Tokko">💰 Sincronizar precios</button>
+      <button class="btn" onclick="sincronizarFotosTokko()" style="background:#fff;border-color:#534AB7;color:#534AB7;" title="Obtener fotos de portada desde Tokko">🖼 Sync fotos</button>
     </div>
     <div class="legend">
       <div class="leg"><div class="leg-dot" style="background:#7F77DD;"></div>Pre-Listing</div>
@@ -1117,17 +1118,55 @@ function copiarLinkColega(pid, tokkoId){
   });
 }
 
+async function sincronizarFotosTokko(){
+  var sinFoto = props.filter(function(p){ return p.tokkoId && !p.finalizada && !p.coverPhoto; });
+  if(!sinFoto.length){ showSaveToast('✅ Todas las propiedades ya tienen foto'); return; }
+  showSaveToast('⏳ Obteniendo '+sinFoto.length+' fotos...');
+  var updated = 0;
+  try {
+    var r = await fetch('https://www.tokkobroker.com/api/v1/property/?key=a816281c7b5e042cf4b63ce93dae3b4ff5817c7e&format=json&limit=200&lang=es_ar&current_status=2');
+    var data = await r.json();
+    var tokkoItems = data.objects || [];
+    sinFoto.forEach(function(p){
+      var tk = tokkoItems.find(function(t){ return String(t.id)===String(p.tokkoId); });
+      if(!tk || !tk.photos || !tk.photos.length) return;
+      var front = tk.photos.find(function(ph){return ph.is_front_cover;});
+      var photo = front ? front.image : tk.photos[0].image || tk.photos[0].thumb || '';
+      if(photo){ p.coverPhoto = photo; saveProp(p); updated++; }
+    });
+    renderGrid();
+    showSaveToast('🖼 '+updated+' fotos actualizadas');
+  } catch(e){
+    showSaveToast('Error: '+e.message);
+  }
+}
+
 async function syncCoverPhoto(pid, tokkoId){
   var p = props.find(function(x){return x.id===pid;}); if(!p||!tokkoId) return;
+  showSaveToast('⏳ Obteniendo foto...');
   try {
     var r = await fetch('https://www.tokkobroker.com/api/v1/property/'+tokkoId+'/?key=a816281c7b5e042cf4b63ce93dae3b4ff5817c7e&format=json&lang=es_ar');
     var d = await r.json();
     var photo = '';
-    if(d.photos && d.photos.length) photo = d.photos[0].image || d.photos[0].thumb || '';
-    else if(d.cover_photo) photo = d.cover_photo;
-    if(photo){ p.coverPhoto = photo; saveProp(p); renderDetail(); renderGrid(); showSaveToast('🖼 Foto de portada actualizada'); }
-    else showSaveToast('Sin fotos disponibles en Tokko');
-  } catch(e){ showSaveToast('Error al obtener foto'); }
+    // Tokko uses photos[0].image as the main photo
+    if(d.photos && d.photos.length){
+      // Prefer is_front_cover photo
+      var front = d.photos.find(function(ph){return ph.is_front_cover;});
+      photo = front ? front.image : d.photos[0].image || d.photos[0].thumb || '';
+    }
+    if(photo){
+      p.coverPhoto = photo;
+      saveProp(p);
+      renderDetail();
+      renderGrid();
+      showSaveToast('🖼 Foto actualizada');
+    } else {
+      showSaveToast('Sin fotos en Tokko para esta propiedad');
+    }
+  } catch(e){
+    showSaveToast('Error: '+e.message);
+    console.error('syncCoverPhoto error:', e);
+  }
 }
 
 function toggleConstructora(pid){
@@ -5447,9 +5486,9 @@ function renderDetail(){
       '</div>'+
 
       // Sync cover photo from Tokko
-      (p.tokkoId&&!p.coverPhoto?
+      (p.tokkoId?
         '<button data-pid="'+p.id+'" data-tid="'+p.tokkoId+'" onclick="event.stopPropagation();syncCoverPhoto(parseInt(this.dataset.pid),this.dataset.tid)" '+
-        'style="margin-top:4px;height:26px;padding:0 10px;font-size:11px;font-weight:600;border:1px solid #ddd;border-radius:6px;background:#fff;color:#555;cursor:pointer;font-family:inherit;white-space:nowrap;">🖼 Obtener foto de Tokko</button>'
+        'style="margin-top:4px;height:26px;padding:0 10px;font-size:11px;font-weight:600;border:1px solid #ddd;border-radius:6px;background:#fff;color:#555;cursor:pointer;font-family:inherit;white-space:nowrap;">🖼 '+(p.coverPhoto?'Actualizar foto':'Obtener foto de Tokko')+'</button>'
       : '')+
 
       // Fotos Drive button
