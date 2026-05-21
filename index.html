@@ -724,6 +724,34 @@ function guardarVisita(pid){
   renderVisitasDB();
 }
 
+function registrarCaida(cid){
+  var c = compradores.find(function(x){ return x.id===cid; }); if(!c) return;
+  var motivo = prompt('Motivo de la caída (opcional):');
+  if(motivo === null) return; // cancelled
+  var fecha = new Date().toLocaleDateString('es-AR');
+  c.caida = { fecha: fecha, motivo: motivo.trim() };
+  // Log in activity
+  if(!c.historial) c.historial = [];
+  c.historial.push({ fecha: fecha, texto: 'Reserva caída' + (motivo?' — '+motivo:'') });
+  saveComp(c);
+  showSaveToast('⚠️ Caída de reserva registrada');
+  renderCompradores();
+  renderCompradorDetail();
+}
+
+function reactivarReserva(cid){
+  var c = compradores.find(function(x){ return x.id===cid; }); if(!c) return;
+  if(!confirm('¿Reactivar la reserva de '+c.nombre+'?')) return;
+  var fecha = new Date().toLocaleDateString('es-AR');
+  if(!c.historial) c.historial = [];
+  c.historial.push({ fecha: fecha, texto: 'Reserva reactivada' });
+  delete c.caida;
+  saveComp(c);
+  showSaveToast('✅ Reserva reactivada');
+  renderCompradores();
+  renderCompradorDetail();
+}
+
 function guardadoManualComp(cid){
   var c = compradores.find(function(x){ return x.id===cid; }); if(!c) return;
   saveComp(c);
@@ -2509,7 +2537,8 @@ function compCardHTML(c){
     '<div class="pcard-owner" style="font-size:11px;color:#185FA5;">'+c.propAddr+'</div>'+
     (c.inmo ? '<div class="pcard-owner">Inmo: '+c.inmo+'</div>' : '')+
     '<div class="pcard-price">'+(c.propPrecio||'—')+'</div>'+
-    '<div class="pcard-ingreso">Reserva: '+(c.fechaReserva||'—')+'</div>'+
+    (c.caida ? '<div style="font-size:10px;font-weight:700;color:#A32D2D;margin-top:2px;">⚠️ Reserva caída — '+c.caida.fecha+'</div>' :
+      '<div class="pcard-ingreso">Reserva: '+(c.fechaReserva||'—')+'</div>')+
     '<div class="prog-lbl"><span>avance</span><span>'+pc+'%</span></div>'+
     '<div class="pcard-bar"><div class="pcard-fill" style="width:'+pc+'%;background:'+(c.finalizada?'#1D9E75':s.fill)+';"></div></div>'+
     (!c.finalizada
@@ -2563,6 +2592,13 @@ function renderCompradorDetail(){
         '<div style="color:#1a1a1a;font-weight:600;">'+c.propAddr+'</div>'+
         '<div style="color:#555;margin-top:2px;">'+(c.propTipo?c.propTipo+' · ':'')+c.propPrecio+(c.inmo?' &nbsp;·&nbsp; <span style="color:#185FA5;font-weight:600;">'+c.inmo+'</span>':'')+'</div>'+
       '</div>'+
+      // Caida de reserva warning
+      (c.caida ? '<div style="margin-top:8px;padding:8px 12px;background:#FCEBEB;border:1px solid #F5C7C7;border-radius:10px;font-size:12px;">'+
+        '<div style="font-weight:700;color:#A32D2D;margin-bottom:2px;">⚠️ Reserva caída — '+c.caida.fecha+'</div>'+
+        (c.caida.motivo?'<div style="color:#555;">'+c.caida.motivo+'</div>':'')+
+        '<button data-cid="'+c.id+'" onclick="event.stopPropagation();reactivarReserva(parseInt(this.dataset.cid))" '+
+        'style="margin-top:6px;height:22px;padding:0 10px;font-size:10px;font-weight:600;border:1px solid #A32D2D;border-radius:6px;background:#fff;color:#A32D2D;cursor:pointer;font-family:inherit;">↩ Reactivar</button>'+
+      '</div>' : '')+
       // Fechas
       '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-top:10px;align-items:flex-end;">'+
         '<div>'+
@@ -2600,6 +2636,10 @@ function renderCompradorDetail(){
       '<div class="det-pct-lbl">completado</div>'+
       '<button data-cid="'+c.id+'" onclick="event.stopPropagation();guardadoManualComp(parseInt(this.dataset.cid))" '+
       'style="margin-top:6px;height:32px;padding:0 14px;font-size:12px;font-weight:700;border:none;border-radius:8px;background:#185FA5;color:#fff;cursor:pointer;font-family:inherit;width:100%;">💾 Guardar</button>'+
+      (!c.caida ?
+        '<button data-cid="'+c.id+'" onclick="event.stopPropagation();registrarCaida(parseInt(this.dataset.cid))" '+
+        'style="margin-top:4px;height:30px;padding:0 14px;font-size:11px;font-weight:700;border:1px solid #A32D2D;border-radius:8px;background:#FCEBEB;color:#A32D2D;cursor:pointer;font-family:inherit;width:100%;">⚠️ Registrar caída</button>'
+      : '')+
     '</div>'+
   '</div>'
   '</div>';
