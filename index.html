@@ -1110,14 +1110,20 @@ function fusionarProps(pid1, pid2){
 }
 
 function copiarLinkColega(pid, tokkoId){
-  // Tokko broker share link format
+  if(!tokkoId || tokkoId==='undefined' || tokkoId==='null'){
+    showSaveToast('⚠️ Esta propiedad no tiene ID de Tokko');
+    return;
+  }
   var link = 'https://www.tokkobroker.com/shared_property/?key=a816281c7b5e042cf4b63ce93dae3b4ff5817c7e&property_id='+tokkoId;
-  navigator.clipboard.writeText(link).then(function(){
-    showSaveToast('🔗 Link de colega copiado');
-  }).catch(function(){
-    // Fallback: show the link in a prompt so user can copy manually
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(link).then(function(){
+      showSaveToast('🔗 Link de colega copiado');
+    }).catch(function(){
+      prompt('Copiá el link de colega:', link);
+    });
+  } else {
     prompt('Copiá el link de colega:', link);
-  });
+  }
 }
 
 async function sincronizarFotosTokko(){
@@ -5507,10 +5513,7 @@ function renderDetail(){
       '</div>'+
 
       // Sync cover photo from Tokko
-      (p.tokkoId?
-        '<button data-pid="'+p.id+'" data-tid="'+p.tokkoId+'" onclick="event.stopPropagation();syncCoverPhoto(parseInt(this.dataset.pid),this.dataset.tid)" '+
-        'style="margin-top:4px;height:26px;padding:0 10px;font-size:11px;font-weight:600;border:1px solid #ddd;border-radius:6px;background:#fff;color:#555;cursor:pointer;font-family:inherit;white-space:nowrap;">🖼 '+(p.coverPhoto?'Actualizar foto':'Obtener foto de Tokko')+'</button>'
-      : '')+
+
 
       // Fotos Drive button
       '<div style="margin-top:4px;display:flex;align-items:center;gap:4px;">'+
@@ -6139,11 +6142,15 @@ function confirmarImportTokko(){
   });
 
   document.getElementById('tokko-overlay').remove();
+  // Save each new prop individually so Firebase has correct data
+  checks.forEach(function(cb){
+    var nid2 = parseInt(cb.dataset.localId||'0');
+    var np = props.find(function(x){ return x.id===nid2; });
+    if(np) saveProp(np);
+  });
+  saveMeta();
   renderGrid();
   renderDetail();
-  // Save immediately after import — don't debounce
-  if(syncTimeout) clearTimeout(syncTimeout);
-  saveSharedMeta();
   alert('✅ '+checks.length+' propiedad'+(checks.length>1?'es importadas':' importada')+' correctamente.');
 }
 
@@ -6329,7 +6336,15 @@ function applyChange(arr, doc, type){
     return arr.filter(function(x){ return String(x.id) !== String(d.id); });
   }
   var idx = arr.findIndex(function(x){ return String(x.id) === String(d.id); });
-  if(idx >= 0) arr[idx] = d; else arr.push(d);
+  if(idx >= 0){
+    // Preserve local isConstructora if Firebase doc doesn't have it
+    if(d.isConstructora === undefined && arr[idx].isConstructora){
+      d.isConstructora = arr[idx].isConstructora;
+    }
+    arr[idx] = d;
+  } else {
+    arr.push(d);
+  }
   return arr;
 }
 
