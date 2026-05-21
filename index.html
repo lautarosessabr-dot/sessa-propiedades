@@ -2004,9 +2004,14 @@ function renderGrid(){
   const act = list.filter(function(p){return !p.finalizada && !isCierre(p);});
   const fin = list.filter(function(p){return p.finalizada;});
   let h = '';
+  // Separate constructoras from regular active
+  var actNormal = act.filter(function(p){ return !p.isConstructora; });
+  var actConst  = act.filter(function(p){ return p.isConstructora; });
+
   if(reserva.length) h += '<div class="sec-label" style="color:#A32D2D;">Reserva tomada — máxima prioridad ('+reserva.length+')</div><div class="grid">'+reserva.map(cardHTML).join('')+'</div>';
   if(ec.length)  h += '<div class="sec-label cierre-lbl">En cierre — seguimiento prioritario ('+ec.length+')</div><div class="grid">'+ec.map(cardHTML).join('')+'</div>';
-  if(act.length){ if(reserva.length||ec.length) h += '<div class="sec-label">Propiedades activas ('+act.length+')</div>'; h += '<div class="grid">'+act.map(cardHTML).join('')+'</div>'; }
+  if(actNormal.length){ if(reserva.length||ec.length) h += '<div class="sec-label">Propiedades activas ('+actNormal.length+')</div>'; h += '<div class="grid">'+actNormal.map(cardHTML).join('')+'</div>'; }
+  if(actConst.length) h += '<div class="sec-label" style="color:#888;">🏗 Constructoras / Desarrolladoras ('+actConst.length+')</div><div class="grid">'+actConst.map(cardHTML).join('')+'</div>';
   if(fin.length) h += '<div class="sec-label">Operaciones finalizadas ('+fin.length+')</div><div class="grid">'+fin.map(cardHTML).join('')+'</div>';
   if(!list.length) h = '<div class="no-sel">Sin resultados.</div>';
   el.innerHTML = h;
