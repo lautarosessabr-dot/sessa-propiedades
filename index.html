@@ -2502,7 +2502,8 @@ function renderCompradores(){
   var allComp = isAdmin() ? compradores : compradores.filter(function(c){
     return !myAsesorId || c.asesorId === myAsesorId;
   });
-  var activos   = allComp.filter(function(c){return !c.finalizada;});
+  var activos     = allComp.filter(function(c){return !c.finalizada && !c.caida;});
+  var caidos      = allComp.filter(function(c){return !c.finalizada && c.caida;});
   var finalizados = allComp.filter(function(c){return c.finalizada;});
   var html = '';
 
