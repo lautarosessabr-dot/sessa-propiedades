@@ -4852,35 +4852,394 @@ function renderTasador(){
   var el = document.getElementById('tasador-content'); if(!el) return;
   el.innerHTML = '';
   var wrap = document.createElement('div');
-  wrap.style.cssText = 'max-width:700px;';
+  wrap.style.cssText = 'max-width:720px;';
+
   var header = document.createElement('div');
-  header.innerHTML = '<h2 style="font-size:20px;font-weight:700;color:var(--text);margin-bottom:6px;">🏷️ Tasador IA</h2><p style="font-size:13px;color:var(--text3);margin-bottom:20px;">Consultamos 3 fuentes: tu cartera, Tokko y la IA.</p>';
+  header.style.cssText = 'margin-bottom:24px;';
+  header.innerHTML =
+    '<h2 style="font-size:20px;font-weight:700;color:var(--text);margin-bottom:6px;">📋 Generador de reporte para propietario</h2>'+
+    '<p style="font-size:13px;color:var(--text3);">Seleccioná la propiedad, completá los datos del período y generá el reporte para el propietario.</p>';
   wrap.appendChild(header);
-  var form = document.createElement('div');
-  form.style.cssText='background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;margin-bottom:16px;';
-  form.innerHTML =
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">'+
-    '<div class="form-group"><label>Tipo *</label><select id="tas-tipo"><option value="">Seleccioná...</option>'+['Casa','Dpto','PH','Monoambiente','Lote','Galpon','Local'].map(function(t){return'<option>'+t+'</option>';}).join('')+'</select></div>'+
-    '<div class="form-group"><label>Zona *</label><input id="tas-zona" type="text" placeholder="ej: City Bell, 44 y 8"/></div>'+
-    '<div class="form-group"><label>Sup. cubierta (m²)</label><input id="tas-sup" type="number" placeholder="65"/></div>'+
-    '<div class="form-group"><label>Sup. total (m²)</label><input id="tas-suptot" type="number" placeholder="120"/></div>'+
-    '<div class="form-group"><label>Dormitorios</label><select id="tas-dorms"><option value="">—</option>'+['Monoambiente','1','2','3','4','5+'].map(function(d){return'<option>'+d+'</option>';}).join('')+'</select></div>'+
-    '<div class="form-group"><label>Baños</label><select id="tas-banos"><option value="">—</option>'+['1','2','3','4+'].map(function(b){return'<option>'+b+'</option>';}).join('')+'</select></div>'+
-    '<div class="form-group"><label>Antigüedad</label><select id="tas-antig"><option value="">—</option>'+['A estrenar','Menos de 5 años','5-15 años','15-30 años','Más de 30 años'].map(function(a){return'<option>'+a+'</option>';}).join('')+'</select></div>'+
-    '<div class="form-group"><label>Estado</label><select id="tas-estado"><option value="">—</option>'+['Excelente','Muy bueno','Bueno','Regular','A refaccionar'].map(function(e){return'<option>'+e+'</option>';}).join('')+'</select></div>'+
-    '</div>'+
-    '<div class="form-group" style="margin-bottom:14px;"><label>Características</label><textarea id="tas-extras" rows="2" placeholder="cochera, jardín, apto banco..." style="width:100%;font-size:13px;padding:8px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface2);color:var(--text);outline:none;font-family:inherit;resize:vertical;"></textarea></div>'+
-    '<div class="form-group"><label>Moneda</label><select id="tas-moneda" style="width:140px;"><option value="USD">USD</option><option value="ARS">ARS</option></select></div>';
-  wrap.appendChild(form);
-  var runBtn = document.createElement('button');
-  runBtn.id='tas-btn'; runBtn.textContent='🏷️ Tasar propiedad';
-  runBtn.style.cssText='height:40px;padding:0 24px;font-size:14px;font-weight:700;border:none;border-radius:var(--radius-sm);background:var(--accent);color:#fff;cursor:pointer;font-family:inherit;margin-bottom:20px;';
-  runBtn.onclick=ejecutarTasacion;
-  wrap.appendChild(runBtn);
-  var result=document.createElement('div'); result.id='tas-result';
-  wrap.appendChild(result);
+
+  // Step 1: Select property
+  var step1 = document.createElement('div');
+  step1.style.cssText = 'background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:16px;';
+  var propOptions = props.filter(function(p){return !p.finalizada;})
+    .map(function(p){ return '<option value="'+p.id+'">'+p.addr+' — '+p.tipo+(p.precio?' ('+p.precio+')':'')+'</option>'; }).join('');
+  step1.innerHTML =
+    '<div style="font-size:12px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;">1 · Seleccioná la propiedad</div>'+
+    '<select id="rep-prop" onchange="cargarDatosProp()" style="width:100%;height:38px;padding:0 12px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface2);color:var(--text);outline:none;font-family:inherit;">'+
+      '<option value="">Seleccioná una propiedad...</option>'+propOptions+
+    '</select>'+
+    '<div id="rep-prop-info" style="margin-top:12px;"></div>';
+  wrap.appendChild(step1);
+
+  // Step 2: Data inputs
+  var step2 = document.createElement('div');
+  step2.style.cssText = 'background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:16px;';
+  step2.innerHTML =
+    '<div style="font-size:12px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:14px;">2 · Datos del período</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">'+
+      // Row 1
+      '<div class="form-group"><label>Mes del reporte</label>'+
+        '<input id="rep-mes" type="month" style="width:100%;height:36px;padding:0 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface2);color:var(--text);outline:none;font-family:inherit;" value="'+new Date().toISOString().slice(0,7)+'"/></div>'+
+      '<div class="form-group"><label>Visitas presenciales (tracker)</label>'+
+        '<input id="rep-visitas-tracker" type="number" min="0" value="0" readonly style="width:100%;height:36px;padding:0 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:#f5f5f5;color:#888;outline:none;font-family:inherit;"/></div>'+
+      // Row 2 — Tokko
+      '<div class="form-group"><label>Exposición en Tokko <span style="font-size:10px;color:#999;">(impresiones)</span></label>'+
+        '<input id="rep-imp-tokko" type="number" min="0" placeholder="ej: 504" style="width:100%;height:36px;padding:0 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface2);color:var(--text);outline:none;font-family:inherit;"/></div>'+
+      '<div class="form-group"><label>Vistas al aviso en Tokko</label>'+
+        '<input id="rep-vis-tokko" type="number" min="0" placeholder="ej: 38" style="width:100%;height:36px;padding:0 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface2);color:var(--text);outline:none;font-family:inherit;"/></div>'+
+      // Row 3 — Zonaprop
+      '<div class="form-group"><label>Exposición Zonaprop <span style="font-size:10px;color:#999;">(búsquedas)</span></label>'+
+        '<input id="rep-exp-zona" type="number" min="0" placeholder="ej: 320" style="width:100%;height:36px;padding:0 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface2);color:var(--text);outline:none;font-family:inherit;"/></div>'+
+      '<div class="form-group"><label>Vistas en Zonaprop</label>'+
+        '<input id="rep-vis-zona" type="number" min="0" placeholder="ej: 42" style="width:100%;height:36px;padding:0 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface2);color:var(--text);outline:none;font-family:inherit;"/></div>'+
+      // Row 4 — web + redes
+      '<div class="form-group"><label>Visitas en nuestra web</label>'+
+        '<input id="rep-vis-web" type="number" min="0" placeholder="ej: 38" style="width:100%;height:36px;padding:0 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface2);color:var(--text);outline:none;font-family:inherit;"/></div>'+
+      '<div class="form-group"><label>Consultas por redes / WhatsApp</label>'+
+        '<input id="rep-cons-redes" type="number" min="0" placeholder="ej: 2" style="width:100%;height:36px;padding:0 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface2);color:var(--text);outline:none;font-family:inherit;"/></div>'+
+      // Row 5 — portales consultas + comentario
+      '<div class="form-group"><label>Consultas por portales</label>'+
+        '<input id="rep-cons-portales" type="number" min="0" placeholder="ej: 0" style="width:100%;height:36px;padding:0 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface2);color:var(--text);outline:none;font-family:inherit;"/></div>'+
+      '<div class="form-group"><label>Fichas enviadas (Tokko)</label>'+
+        '<input id="rep-fichas" type="number" min="0" placeholder="ej: 0" style="width:100%;height:36px;padding:0 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface2);color:var(--text);outline:none;font-family:inherit;"/></div>'+
+      '<div class="form-group" style="grid-column:1/-1;"><label>Novedades / Comentario del asesor</label>'+
+        '<textarea id="rep-comentario" rows="3" placeholder="ej: Hubo un interesado que visitó la propiedad y está evaluando la propuesta..." style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface2);color:var(--text);outline:none;font-family:inherit;resize:vertical;box-sizing:border-box;"></textarea></div>'+
+    '</div>';
+  wrap.appendChild(step2);
+
+  // Buttons
+  var btns = document.createElement('div');
+  btns.style.cssText = 'display:flex;gap:10px;margin-bottom:20px;';
+  btns.innerHTML =
+    '<button onclick="generarReportePDF()" style="height:42px;padding:0 22px;font-size:13px;font-weight:700;border:none;border-radius:var(--radius-sm);background:#1E2D4A;color:#fff;cursor:pointer;font-family:inherit;">📄 Generar PDF</button>'+
+    '<button onclick="renderTasador()" style="height:42px;padding:0 16px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text2);cursor:pointer;font-family:inherit;">🔄 Limpiar</button>';
+  wrap.appendChild(btns);
+
   el.appendChild(wrap);
 }
+
+function cargarDatosProp(){
+  var sel = document.getElementById('rep-prop'); if(!sel||!sel.value) return;
+  var pid = parseInt(sel.value);
+  var p = props.find(function(x){return x.id===pid;}); if(!p) return;
+  var a = asesores.find(function(x){return x.id===p.asesorId;})||{name:'—'};
+  var vis = (p.visitas||[]).length;
+  var inpV = document.getElementById('rep-visitas-tracker');
+  if(inpV) inpV.value = vis;
+  var dias = '—';
+  if(p.ingreso){
+    var parts = p.ingreso.split('/');
+    if(parts.length===3){
+      var d = new Date(parseInt(parts[2]),parseInt(parts[1])-1,parseInt(parts[0]));
+      dias = Math.floor((Date.now()-d.getTime())/(1000*60*60*24));
+    }
+  }
+  var info = document.getElementById('rep-prop-info');
+  if(info) info.innerHTML =
+    '<div style="display:flex;gap:14px;flex-wrap:wrap;padding:12px 14px;background:var(--surface2);border-radius:var(--radius-sm);font-size:12px;">'+
+      '<div><span style="color:var(--text3);display:block;">Tipo</span><strong>'+p.tipo+'</strong></div>'+
+      '<div><span style="color:var(--text3);display:block;">Precio</span><strong>'+p.precio+'</strong></div>'+
+      '<div><span style="color:var(--text3);display:block;">Asesor</span><strong>'+a.name+'</strong></div>'+
+      '<div><span style="color:var(--text3);display:block;">Días en cartera</span><strong>'+dias+'</strong></div>'+
+      '<div><span style="color:var(--text3);display:block;">Visitas registradas</span><strong>'+vis+'</strong></div>'+
+    '</div>';
+}
+
+function getReporteData(){
+  var pid = parseInt((document.getElementById('rep-prop')||{}).value||'0');
+  var p = pid ? props.find(function(x){return x.id===pid;}) : null;
+  if(!p){ alert('Seleccioná una propiedad'); return null; }
+  var a = asesores.find(function(x){return x.id===p.asesorId;})||{name:'—'};
+  var mes = (document.getElementById('rep-mes')||{}).value||'';
+  var mesLabel = mes ? new Date(mes+'-02').toLocaleDateString('es-AR',{month:'long',year:'numeric'}) : '—';
+  var dias = '—';
+  if(p.ingreso){
+    var parts = p.ingreso.split('/');
+    if(parts.length===3){
+      var d = new Date(parseInt(parts[2]),parseInt(parts[1])-1,parseInt(parts[0]));
+      dias = Math.floor((Date.now()-d.getTime())/(1000*60*60*24));
+    }
+  }
+  return {
+    prop:p, asesor:a, mesLabel:mesLabel, dias:dias,
+    visTracker:  parseInt((document.getElementById('rep-visitas-tracker')||{}).value||'0'),
+    impTokko:    parseInt((document.getElementById('rep-imp-tokko')||{}).value||'0'),
+    visTokko:    parseInt((document.getElementById('rep-vis-tokko')||{}).value||'0'),
+    expZona:     parseInt((document.getElementById('rep-exp-zona')||{}).value||'0'),
+    visZona:     parseInt((document.getElementById('rep-vis-zona')||{}).value||'0'),
+    visWeb:      parseInt((document.getElementById('rep-vis-web')||{}).value||'0'),
+    consRedes:   parseInt((document.getElementById('rep-cons-redes')||{}).value||'0'),
+    consPortales:parseInt((document.getElementById('rep-cons-portales')||{}).value||'0'),
+    fichas:      parseInt((document.getElementById('rep-fichas')||{}).value||'0'),
+    comentario:  (document.getElementById('rep-comentario')||{}).value||'',
+  };
+}
+
+async function generarReportePDF(){
+  var d = getReporteData(); if(!d) return;
+  var p = d.prop;
+  var totalVis = d.visTokko + d.visZona + d.visWeb;
+  var totalConsultas = d.consPortales + d.consRedes;
+  var exposicionTotal = d.impTokko + d.expZona;
+  var mesUp = d.mesLabel.toUpperCase();
+  var coverPhoto = p.coverPhoto || '';
+
+  // Auto: price analysis vs market
+  var similares = props.filter(function(x){
+    return !x.finalizada && x.id!==p.id && x.tipo===p.tipo && x.precio;
+  });
+  var precios = similares.map(function(x){
+    return parseFloat((x.precio||'').replace(/[^0-9.]/g,''));
+  }).filter(function(n){return !isNaN(n)&&n>0;});
+  var precioActual = parseFloat((p.precio||'').replace(/[^0-9.]/g,''));
+  var precioIngreso = parseFloat((p.precioIngreso||p.precio||'').replace(/[^0-9.]/g,''));
+  var bajaPct = precioIngreso && precioActual && precioIngreso!==precioActual ?
+    Math.round((1-(precioActual/precioIngreso))*100) : 0;
+  var mercadoPromedio = precios.length ?
+    Math.round(precios.reduce(function(a,b){return a+b;},0)/precios.length) : 0;
+  var sym = (p.precio||'').includes('USD')||p.precio.includes('U$D') ? 'USD' : '$';
+
+  // Activity score 0-100
+  var actScore = Math.min(100, Math.round(
+    (d.visTokko*2) + (d.visZona*1.5) + (d.visWeb*1.5) + (totalConsultas*8) + (d.visTracker*15)
+  ));
+  var actLabel = actScore>=70?'Alta':actScore>=35?'Media':'Baja';
+  var actColor = actScore>=70?'#00B050':actScore>=35?'#FFC000':'#E24B4A';
+
+  // AI recommendation via Groq
+  var recText = 'Analizando los datos para generar recomendación...';
+  try {
+    var pr = 'Sos un asesor inmobiliario experto argentino. Basándote en estos datos de la propiedad '+p.addr+' ('+p.tipo+', '+p.precio+') en el mes de '+d.mesLabel+':'+
+      ' Impresiones: '+d.impTokko+', Vistas Tokko: '+d.visTokko+', Consultas: '+totalConsultas+', Visitas presenciales: '+d.visTracker+
+      (bajaPct?' Bajó el precio '+bajaPct+'%.':'')+(mercadoPromedio?' Precio promedio del mercado: '+sym+' '+mercadoPromedio.toLocaleString('es-AR')+'.':'')+
+      ' Días en cartera: '+d.dias+'.'+
+      (d.comentario?' Novedades: '+d.comentario+'.':'')+
+      ' Redactá 2 oraciones de recomendación concreta y profesional para el propietario. Sin saludos, directo al punto.';
+    var ir = await fetch('https://api.groq.com/openai/v1/chat/completions',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer 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'},
+      body:JSON.stringify({model:'llama-3.3-70b-versatile',max_tokens:120,messages:[{role:'user',content:pr}]})
+    });
+    var id = await ir.json();
+    recText = id.choices&&id.choices[0]?id.choices[0].message.content.trim():recText;
+  } catch(e){ recText = 'La propiedad está siendo gestionada activamente por el equipo de Sessa Propiedades.'; }
+
+  // Price history
+  var histHTML = '';
+  if(p.historialPrecios&&p.historialPrecios.length){
+    histHTML = p.historialPrecios.slice(-4).map(function(h){
+      return '<tr><td>'+h.fecha+'</td><td style="text-align:right;font-weight:600;">'+h.precio+'</td></tr>';
+    }).join('');
+  }
+
+  var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Reporte '+p.addr+'</title>'+
+  '<style>'+
+  '@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700;800&display=swap");'+
+  '*{box-sizing:border-box;margin:0;padding:0;}'+
+  'body{font-family:"DM Sans",sans-serif;background:#fff;color:#1a1a1a;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'+
+  '.page{width:794px;min-height:1123px;margin:0 auto;padding:0;page-break-after:always;position:relative;}'+
+  '@media print{.page{width:100%;page-break-after:always;}}'+
+  '.cover{display:flex;min-height:1123px;}'+
+  '.cover-bar{width:72px;background:#1E2D4A;flex-shrink:0;}'+
+  '.cover-body{flex:1;padding:48px;display:flex;flex-direction:column;}'+
+  '.sessa-logo{font-size:32px;font-weight:800;letter-spacing:-.03em;color:#1E2D4A;line-height:1;}'+
+  '.sessa-sub{font-size:10px;color:#999;letter-spacing:.18em;text-transform:uppercase;margin-top:1px;}'+
+  '.cover-tag{font-size:13px;font-weight:400;color:#888;text-transform:uppercase;letter-spacing:.14em;margin-top:48px;margin-bottom:4px;}'+
+  '.cover-h1{font-size:52px;font-weight:800;color:#1E2D4A;line-height:1.05;margin-bottom:20px;}'+
+  '.cover-line{width:64px;height:3px;background:#3D5FA0;margin-bottom:40px;}'+
+  '.cover-img{width:100%;height:420px;object-fit:cover;border-radius:10px;margin-bottom:auto;}'+
+  '.cover-img-ph{width:100%;height:420px;background:#EEF1F5;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#bbb;font-size:14px;margin-bottom:auto;}'+
+  '.cover-month{background:#1E2D4A;color:#fff;padding:13px 24px;border-radius:7px;font-size:14px;font-weight:700;letter-spacing:.1em;display:inline-block;margin-top:32px;}'+
+  // data page
+  '.dp{padding:44px 48px;min-height:1123px;display:flex;flex-direction:column;}'+
+  '.dp-logo{display:flex;justify-content:flex-end;margin-bottom:36px;}'+
+  '.sec{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:#3D5FA0;margin-bottom:12px;padding-bottom:7px;border-bottom:2px solid #E6EDF8;}'+
+  '.prop-row{display:flex;gap:18px;margin-bottom:28px;}'+
+  '.pimg{width:195px;height:135px;object-fit:cover;border-radius:8px;flex-shrink:0;}'+
+  '.pimg-ph{width:195px;height:135px;background:#EEF1F5;border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#bbb;font-size:11px;}'+
+  '.pmeta{flex:1;}'+
+  '.ptipo{font-size:10px;color:#999;text-transform:uppercase;letter-spacing:.08em;margin-bottom:3px;}'+
+  '.paddr{font-size:19px;font-weight:700;margin-bottom:5px;}'+
+  '.pdet{font-size:12px;color:#666;line-height:1.6;}'+
+  '.stbl{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:22px;}'+
+  '.stbl th{background:#F0F4FF;color:#1E2D4A;font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.06em;padding:9px 12px;text-align:left;}'+
+  '.stbl td{padding:9px 12px;border-bottom:1px solid #f2f2f2;color:#333;}'+
+  '.stbl td.num{text-align:right;font-weight:700;color:#1E2D4A;font-size:14px;}'+
+  '.pill{display:inline-block;padding:2px 10px;border-radius:20px;font-size:10px;font-weight:700;}'+
+  // kpi page
+  '.kp{padding:44px 48px;min-height:1123px;display:flex;flex-direction:column;}'+
+  '.hero{background:#1E2D4A;color:#fff;border-radius:12px;padding:36px 40px;text-align:center;margin-bottom:20px;}'+
+  '.hero-val{font-size:86px;font-weight:800;line-height:1;}'+
+  '.hero-lbl{font-size:15px;opacity:.8;margin-top:4px;}'+
+  '.kgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px;}'+
+  '.kbox{border:1.5px solid #e8edf5;border-radius:10px;padding:18px 14px;text-align:center;}'+
+  '.kval{font-size:38px;font-weight:800;color:#1E2D4A;}'+
+  '.klbl{font-size:11px;color:#888;margin-top:3px;}'+
+  '.ksub{font-size:10px;color:#bbb;margin-top:1px;}'+
+  '.kgreen{background:#00B050;border-color:#00B050;}.kgreen .kval,.kgreen .klbl{color:#fff;}'+
+  '.kblue{background:#1E2D4A;border-color:#1E2D4A;}.kblue .kval,.kblue .klbl{color:#fff;}'+
+  '.sumtbl{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:20px;}'+
+  '.sumtbl th{background:#1E2D4A;color:#fff;padding:11px 14px;text-align:center;font-size:10px;text-transform:uppercase;letter-spacing:.07em;}'+
+  '.sumtbl td{padding:13px 14px;text-align:center;font-weight:700;font-size:16px;border:1px solid #eee;}'+
+  // recommendation
+  '.rec{background:#F0F4FF;border-left:4px solid #3D5FA0;padding:14px 18px;border-radius:0 8px 8px 0;font-size:12px;line-height:1.7;color:#333;margin-bottom:20px;}'+
+  '.rec-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#3D5FA0;margin-bottom:6px;}'+
+  // activity
+  '.act-bar-wrap{background:#f0f0f0;border-radius:20px;height:10px;margin:8px 0 4px;}'+
+  '.act-bar{height:10px;border-radius:20px;transition:width .3s;}'+
+  // footer
+  '.footer{margin-top:auto;padding-top:16px;border-top:1px solid #eee;display:flex;justify-content:space-between;font-size:10px;color:#bbb;}'+
+  '</style></head><body>'+
+
+  // ── PORTADA ──────────────────────────────────────────────────────
+  '<div class="page cover">'+
+    '<div class="cover-bar"></div>'+
+    '<div class="cover-body">'+
+      '<div style="display:flex;justify-content:flex-end;">'+
+        '<div><div class="sessa-logo">SESSA</div><div class="sessa-sub">Propiedades</div></div>'+
+      '</div>'+
+      '<div style="flex:1;display:flex;flex-direction:column;justify-content:center;">'+
+        '<div class="cover-tag">Reporte</div>'+
+        '<div class="cover-h1">RESULTADOS</div>'+
+        '<div class="cover-line"></div>'+
+        (coverPhoto?'<img src="'+coverPhoto+'" class="cover-img" crossorigin="anonymous"/>':'<div class="cover-img-ph">Sin foto de portada</div>')+
+      '</div>'+
+      '<div class="cover-month">'+mesUp+'</div>'+
+    '</div>'+
+  '</div>'+
+
+  // ── PÁGINA 2: PROPIEDAD + ESTADÍSTICAS ───────────────────────────
+  '<div class="page dp">'+
+    '<div class="dp-logo"><div><div class="sessa-logo" style="font-size:18px;">SESSA</div><div class="sessa-sub" style="font-size:8px;">Propiedades</div></div></div>'+
+
+    '<div class="sec">Propiedad</div>'+
+    '<div class="prop-row">'+
+      (coverPhoto?'<img src="'+coverPhoto+'" class="pimg" crossorigin="anonymous"/>':'<div class="pimg-ph">Sin foto</div>')+
+      '<div class="pmeta">'+
+        '<div class="ptipo">'+p.tipo+'</div>'+
+        '<div class="paddr">'+p.addr+'</div>'+
+        '<div class="pdet">📍 La Plata, Buenos Aires</div>'+
+        '<div class="pdet">Venta &nbsp;·&nbsp; <strong style="color:#1E2D4A;">'+p.precio+'</strong></div>'+
+        '<div class="pdet">Asesor: <strong>'+d.asesor.name+'</strong> &nbsp;·&nbsp; <strong>'+d.dias+'</strong> días en cartera</div>'+
+        (bajaPct>0?'<div style="margin-top:6px;"><span class="pill" style="background:#FAEEDA;color:#854F0B;">Precio ajustado -'+bajaPct+'% desde el ingreso</span></div>':'')+
+      '</div>'+
+    '</div>'+
+
+    // Activity indicator
+    '<div class="sec">Actividad del período</div>'+
+    '<div style="display:flex;align-items:center;gap:12px;margin-bottom:6px;">'+
+      '<span style="font-size:11px;color:#666;">Nivel de actividad:</span>'+
+      '<span style="font-size:12px;font-weight:700;color:'+actColor+';">'+actLabel+'</span>'+
+      '<span style="font-size:10px;color:#bbb;">('+actScore+'/100)</span>'+
+    '</div>'+
+    '<div class="act-bar-wrap"><div class="act-bar" style="width:'+actScore+'%;background:'+actColor+';"></div></div>'+
+    '<div style="font-size:10px;color:#bbb;margin-bottom:20px;">Calculado en base a impresiones, vistas, consultas y visitas presenciales</div>'+
+
+    // Tokko stats
+    '<div class="sec">Estadísticas en Tokko Broker</div>'+
+    '<table class="stbl">'+
+      '<tr><th>Métrica</th><th style="text-align:right;">Últimos 30 días</th></tr>'+
+      '<tr><td>Fichas enviadas</td><td class="num">'+d.fichas+'</td></tr>'+
+      '<tr><td>Consultas recibidas</td><td class="num">'+d.consPortales+'</td></tr>'+
+      '<tr><td>Impresiones (exposición)</td><td class="num">'+d.impTokko.toLocaleString('es-AR')+'</td></tr>'+
+      '<tr><td>Vistas al aviso</td><td class="num">'+d.visTokko+'</td></tr>'+
+    '</table>'+
+
+    // Zonaprop stats
+    '<div class="sec">Estadísticas en Zonaprop</div>'+
+    '<table class="stbl">'+
+      '<tr><th>Estadísticas</th><th style="text-align:right;">Últimos 30 días</th></tr>'+
+      '<tr><td>Exposición — apariciones en búsquedas</td><td class="num">'+d.expZona.toLocaleString('es-AR')+'</td></tr>'+
+      '<tr><td>Vistas al aviso</td><td class="num">'+d.visZona+'</td></tr>'+
+      '<tr><td>Contactos interesados</td><td class="num">'+d.consPortales+'</td></tr>'+
+    '</table>'+
+
+    // Price history
+    (histHTML?
+      '<div class="sec">Historial de precio</div>'+
+      '<table class="stbl">'+
+        '<tr><th>Fecha</th><th style="text-align:right;">Precio</th></tr>'+
+        histHTML+
+        '<tr style="background:#F0F4FF;"><td><strong>Precio actual</strong></td><td class="num">'+p.precio+'</td></tr>'+
+      '</table>'
+    : '')+
+
+    // Market comparison
+    (mercadoPromedio>0?
+      '<div class="sec">Análisis de mercado</div>'+
+      '<div style="display:flex;gap:16px;margin-bottom:20px;">'+
+        '<div style="flex:1;background:#F0F4FF;border-radius:8px;padding:14px 16px;text-align:center;">'+
+          '<div style="font-size:10px;color:#888;margin-bottom:4px;">Precio de tu propiedad</div>'+
+          '<div style="font-size:18px;font-weight:700;color:#1E2D4A;">'+sym+' '+precioActual.toLocaleString('es-AR')+'</div>'+
+        '</div>'+
+        '<div style="flex:1;background:#f8f8f8;border-radius:8px;padding:14px 16px;text-align:center;">'+
+          '<div style="font-size:10px;color:#888;margin-bottom:4px;">Promedio de '+similares.length+' prop. similares</div>'+
+          '<div style="font-size:18px;font-weight:700;color:#555;">'+sym+' '+mercadoPromedio.toLocaleString('es-AR')+'</div>'+
+        '</div>'+
+      '</div>'
+    : '')+
+
+    '<div class="footer"><span>Sessa Propiedades &nbsp;·&nbsp; sessapropiedades.com.ar</span><span>'+d.mesLabel+'</span></div>'+
+  '</div>'+
+
+  // ── PÁGINA 3: KPIs + RECOMENDACIÓN ──────────────────────────────
+  '<div class="page kp">'+
+    '<div class="dp-logo"><div><div class="sessa-logo" style="font-size:18px;">SESSA</div><div class="sessa-sub" style="font-size:8px;">Propiedades</div></div></div>'+
+
+    '<div class="hero">'+
+      '<div class="hero-val">'+totalVis+'</div>'+
+      '<div class="hero-lbl">Visualizaciones totales del mes</div>'+
+    '</div>'+
+
+    '<div class="kgrid">'+
+      '<div class="kbox"><div class="kval">'+d.visTokko+'</div><div class="klbl">En Tokko</div><div class="ksub">vistas al aviso</div></div>'+
+      '<div class="kbox"><div class="kval">'+d.visZona+'</div><div class="klbl">En Zonaprop</div><div class="ksub">vistas al aviso</div></div>'+
+      '<div class="kbox"><div class="kval">'+d.visWeb+'</div><div class="klbl">En nuestra web</div><div class="ksub">sessapropiedades.com.ar</div></div>'+
+    '</div>'+
+
+    '<div class="kgrid">'+
+      '<div class="kbox kgreen"><div class="kval">'+totalConsultas+'</div><div class="klbl">Consultas totales</div></div>'+
+      '<div class="kbox kblue"><div class="kval">'+d.visTracker+'</div><div class="klbl">Visitas presenciales</div></div>'+
+      '<div class="kbox"><div class="kval">'+exposicionTotal.toLocaleString('es-AR')+'</div><div class="klbl">Exposición total</div><div class="ksub">impresiones</div></div>'+
+    '</div>'+
+
+    '<table class="sumtbl">'+
+      '<tr><th>EXPOSICIÓN</th><th>VISUALIZACIONES</th><th>CONSULTAS</th><th>VISITAS</th></tr>'+
+      '<tr>'+
+        '<td>'+exposicionTotal.toLocaleString('es-AR')+'</td>'+
+        '<td>'+totalVis+'</td>'+
+        '<td>'+totalConsultas+'</td>'+
+        '<td>'+d.visTracker+'</td>'+
+      '</tr>'+
+    '</table>'+
+
+    '<div class="rec">'+
+      '<div class="rec-title">✨ Recomendación del equipo</div>'+
+      recText+
+    '</div>'+
+
+    (d.comentario?
+      '<div class="rec" style="background:#F8F9FA;border-color:#999;">'+
+        '<div class="rec-title" style="color:#666;">Novedades del mes</div>'+
+        d.comentario+
+      '</div>'
+    : '')+
+
+    '<div class="footer"><span>Sessa Propiedades &nbsp;·&nbsp; sessapropiedades.com.ar</span><span>Reporte '+d.mesLabel+' · Generado el '+new Date().toLocaleDateString('es-AR')+'</span></div>'+
+  '</div>'+
+
+  '</body></html>';
+
+  var win = window.open('','_blank');
+  if(!win){ alert('Habilitá las ventanas emergentes en tu browser'); return; }
+  win.document.write(html);
+  win.document.close();
+  setTimeout(function(){ win.print(); }, 1200);
+}
+
 
 async function ejecutarTasacion(){
   var tipo=((document.getElementById('tas-tipo')||{}).value||'');
