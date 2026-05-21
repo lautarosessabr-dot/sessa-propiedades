@@ -6340,16 +6340,25 @@ function saveAsesorDoc(a){
 
 function saveMeta(){
   if(!currentUser) return;
-  window._fb.setDoc(window._fb.doc(window._fb.db,'sessa_meta','shared'), {
-    reservasLog: JSON.parse(JSON.stringify(reservasLog)),
-    visitasDB:   JSON.parse(JSON.stringify(visitasDB)),
-    busquedas:   JSON.parse(JSON.stringify(busquedas)),
+  if(!window._metaLoaded) {
+    // Don't save until we've loaded from Firebase at least once
+    console.warn('[Sessa] saveMeta blocked — meta not loaded yet');
+    return;
+  }
+  var payload = {
     metaMensual: metaMensual,
-    nextId:      nextId,
-    nextCid:     nextCid,
-    nextAid:     nextAid,
-    nextCapId:   nextCapId,
-  }, {merge:true}).catch(function(e){ console.error('[Sessa] saveMeta error:',e); });
+  };
+  // Only save IDs if they're greater than 0
+  if(nextId > 1)    payload.nextId    = nextId;
+  if(nextCid > 1)   payload.nextCid   = nextCid;
+  if(nextAid > 1)   payload.nextAid   = nextAid;
+  if(nextCapId > 1) payload.nextCapId = nextCapId;
+  // Only save arrays if they have data OR meta was explicitly loaded (safe to save empty)
+  if(reservasLog.length > 0) payload.reservasLog = JSON.parse(JSON.stringify(reservasLog));
+  if(visitasDB.length > 0)   payload.visitasDB   = JSON.parse(JSON.stringify(visitasDB));
+  if(busquedas.length > 0)   payload.busquedas   = JSON.parse(JSON.stringify(busquedas));
+  window._fb.setDoc(window._fb.doc(window._fb.db,'sessa_meta','shared'), payload, {merge:true})
+    .catch(function(e){ console.error('[Sessa] saveMeta error:',e); });
 }
 
 function saveSharedMeta(){
@@ -6459,6 +6468,7 @@ function startSync(){
     if(data.visitasDB !== undefined)   visitasDB   = data.visitasDB;
     if(data.metaMensual !== undefined) metaMensual = data.metaMensual;
     if(data.busquedas !== undefined)   busquedas   = data.busquedas;
+    window._metaLoaded = true;
     var bTab = document.getElementById('tab-busquedas');
     if(bTab && bTab.style.display !== 'none') renderBusquedas();
   });
