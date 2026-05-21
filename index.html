@@ -2513,6 +2513,10 @@ function renderCompradores(){
     html += '<div class="sec-label">Operaciones finalizadas ('+finalizados.length+')</div>';
     html += '<div class="grid">'+finalizados.map(compCardHTML).join('')+'</div>';
   }
+  if(caidos.length){
+    html += '<div class="sec-label" style="color:#A32D2D;">⚠️ Reservas caídas ('+caidos.length+')</div>';
+    html += '<div class="grid" style="opacity:.65;">'+caidos.map(compCardHTML).join('')+'</div>';
+  }
   el.innerHTML = html;
   renderCompradorDetail();
 }
@@ -4453,6 +4457,16 @@ function exportarBasePropietarios(){
   document.body.appendChild(overlay);
 }
 
+function canEditThisCap(c){
+  // Admin can edit any captacion, asesor can edit their own
+  if(isAdmin()) return true;
+  var cur = auth && auth.currentUser;
+  if(!cur) return false;
+  var myAsesor = asesores.find(function(a){ return a.email===cur.email; });
+  if(!myAsesor) return false;
+  return c.asesorId === myAsesor.id;
+}
+
 function renderCapDetail(){
   var el = document.getElementById('cap-detail'); if(!el) return;
   if(!activeCap){ el.innerHTML='<div class="no-sel">Seleccioná una captación para ver el detalle.</div>'; return; }
@@ -4480,7 +4494,7 @@ function renderCapDetail(){
       '</div>'+
     '</div>'+
     '<div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;">'+
-      (!isAdmin() ? (c.estado==='activa'?
+      (canEditThisCap(c) ? (c.estado==='activa'?
         '<button onclick="renovarCap('+c.id+')" style="height:26px;padding:0 10px;font-size:11px;font-weight:600;border:1px solid #185FA5;border-radius:8px;background:#E6F1FB;color:#0C447C;cursor:pointer;font-family:inherit;white-space:nowrap;">↺ Renovar semana</button>'+
         '<div style="display:flex;gap:4px;">'+
           '<button onclick="cerrarCap('+c.id+',2)" style="height:26px;padding:0 8px;font-size:11px;font-weight:600;border:1px solid #0F6E56;border-radius:8px;background:#E1F5EE;color:#085041;cursor:pointer;font-family:inherit;">✅ Captada</button>'+
@@ -4512,7 +4526,7 @@ function renderCapDetail(){
 
   // Comentarios
   h += '<div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Plan de captación / comentarios</div>'+
-    '<textarea rows="6" '+(isAdmin()?'readonly style="width:100%;font-size:13px;padding:10px;border:1px solid #eee;border-radius:10px;font-family:inherit;resize:vertical;outline:none;background:#fafaf8;line-height:1.5;color:#888;"':'style="width:100%;font-size:13px;padding:10px;border:1px solid #ddd;border-radius:10px;font-family:inherit;resize:vertical;outline:none;background:#fff;line-height:1.5;" onchange="saveCaptacionField('+c.id+',3,this.value)"')+' onclick="event.stopPropagation()">'+c.comentarios+'</textarea>';
+    '<textarea rows="6" '+(!canEditThisCap(c)?'readonly style="width:100%;font-size:13px;padding:10px;border:1px solid #eee;border-radius:10px;font-family:inherit;resize:vertical;outline:none;background:#fafaf8;line-height:1.5;color:#888;"':'style="width:100%;font-size:13px;padding:10px;border:1px solid #ddd;border-radius:10px;font-family:inherit;resize:vertical;outline:none;background:#fff;line-height:1.5;" onchange="saveCaptacionField('+c.id+',3,this.value)"')+' onclick="event.stopPropagation()">'+c.comentarios+'</textarea>';
 
   // Created at
   var createdDate = new Date(c.createdAt).toLocaleDateString('es-AR',{day:'numeric',month:'long',year:'numeric'});
