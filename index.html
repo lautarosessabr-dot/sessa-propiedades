@@ -4864,14 +4864,30 @@ function renderTasador(){
   // Step 1: Select property
   var step1 = document.createElement('div');
   step1.style.cssText = 'background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:16px;';
-  var propOptions = props.filter(function(p){return !p.finalizada;})
-    .map(function(p){ return '<option value="'+p.id+'">'+p.addr+' — '+p.tipo+(p.precio?' ('+p.precio+')':'')+'</option>'; }).join('');
   step1.innerHTML =
     '<div style="font-size:12px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;">1 · Seleccioná la propiedad</div>'+
     '<select id="rep-prop" onchange="cargarDatosProp()" style="width:100%;height:38px;padding:0 12px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface2);color:var(--text);outline:none;font-family:inherit;">'+
-      '<option value="">Seleccioná una propiedad...</option>'+propOptions+
+      '<option value="">Seleccioná una propiedad...</option>'+
     '</select>'+
     '<div id="rep-prop-info" style="margin-top:12px;"></div>';
+  // Populate after DOM is ready — props may already be loaded
+  setTimeout(function(){
+    var sel = document.getElementById('rep-prop'); if(!sel) return;
+    var activas = props.filter(function(p){return !p.finalizada;})
+      .sort(function(a,b){return (a.addr||'').localeCompare(b.addr||'');});
+    activas.forEach(function(p){
+      var opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = p.addr+' — '+p.tipo+(p.precio?' ('+p.precio+')':'');
+      sel.appendChild(opt);
+    });
+    if(!activas.length){
+      var opt = document.createElement('option');
+      opt.disabled = true;
+      opt.textContent = 'No hay propiedades activas';
+      sel.appendChild(opt);
+    }
+  }, 300);
   wrap.appendChild(step1);
 
   // Step 2: Data inputs
