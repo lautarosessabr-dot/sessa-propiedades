@@ -4914,7 +4914,8 @@ function renderTasador(){
   var btns = document.createElement('div');
   btns.style.cssText = 'display:flex;gap:10px;margin-bottom:20px;';
   btns.innerHTML =
-    '<button onclick="generarReportePDF()" style="height:42px;padding:0 22px;font-size:13px;font-weight:700;border:none;border-radius:var(--radius-sm);background:#1E2D4A;color:#fff;cursor:pointer;font-family:inherit;">📄 Generar PDF</button>'+
+    '<button onclick="generarReportePDF(false)" style="height:42px;padding:0 22px;font-size:13px;font-weight:700;border:none;border-radius:var(--radius-sm);background:#1E2D4A;color:#fff;cursor:pointer;font-family:inherit;">🖨️ Vista previa / Imprimir</button>'+
+    '<button onclick="generarReportePDF(true)" style="height:42px;padding:0 22px;font-size:13px;font-weight:700;border:none;border-radius:var(--radius-sm);background:#0F6E56;color:#fff;cursor:pointer;font-family:inherit;">⬇️ Descargar PDF</button>'+
     '<button onclick="renderTasador()" style="height:42px;padding:0 16px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text2);cursor:pointer;font-family:inherit;">🔄 Limpiar</button>';
   wrap.appendChild(btns);
 
@@ -4978,7 +4979,65 @@ function getReporteData(){
   };
 }
 
-async function generarReportePDF(){
+
+function cargarDatosProp(){
+  var sel = document.getElementById('rep-prop'); if(!sel||!sel.value) return;
+  var pid = parseInt(sel.value);
+  var p = props.find(function(x){return x.id===pid;}); if(!p) return;
+  var a = asesores.find(function(x){return x.id===p.asesorId;})||{name:'—'};
+  var vis = (p.visitas||[]).length;
+  var inpV = document.getElementById('rep-visitas-tracker');
+  if(inpV) inpV.value = vis;
+  var dias = '—';
+  if(p.ingreso){
+    var parts = p.ingreso.split('/');
+    if(parts.length===3){
+      var d = new Date(parseInt(parts[2]),parseInt(parts[1])-1,parseInt(parts[0]));
+      dias = Math.floor((Date.now()-d.getTime())/(1000*60*60*24));
+    }
+  }
+  var info = document.getElementById('rep-prop-info');
+  if(info) info.innerHTML =
+    '<div style="display:flex;gap:14px;flex-wrap:wrap;padding:12px 14px;background:var(--surface2);border-radius:var(--radius-sm);font-size:12px;">'+
+      '<div><span style="color:var(--text3);display:block;">Tipo</span><strong>'+p.tipo+'</strong></div>'+
+      '<div><span style="color:var(--text3);display:block;">Precio</span><strong>'+p.precio+'</strong></div>'+
+      '<div><span style="color:var(--text3);display:block;">Asesor</span><strong>'+a.name+'</strong></div>'+
+      '<div><span style="color:var(--text3);display:block;">Días en cartera</span><strong>'+dias+'</strong></div>'+
+      '<div><span style="color:var(--text3);display:block;">Visitas registradas</span><strong>'+vis+'</strong></div>'+
+    '</div>';
+}
+
+function getReporteData(){
+  var pid = parseInt((document.getElementById('rep-prop')||{}).value||'0');
+  var p = pid ? props.find(function(x){return x.id===pid;}) : null;
+  if(!p){ alert('Seleccioná una propiedad'); return null; }
+  var a = asesores.find(function(x){return x.id===p.asesorId;})||{name:'—'};
+  var mes = (document.getElementById('rep-mes')||{}).value||'';
+  var mesLabel = mes ? new Date(mes+'-02').toLocaleDateString('es-AR',{month:'long',year:'numeric'}) : '—';
+  var dias = '—';
+  if(p.ingreso){
+    var parts = p.ingreso.split('/');
+    if(parts.length===3){
+      var d = new Date(parseInt(parts[2]),parseInt(parts[1])-1,parseInt(parts[0]));
+      dias = Math.floor((Date.now()-d.getTime())/(1000*60*60*24));
+    }
+  }
+  return {
+    prop:p, asesor:a, mesLabel:mesLabel, dias:dias,
+    visTracker:  parseInt((document.getElementById('rep-visitas-tracker')||{}).value||'0'),
+    impTokko:    parseInt((document.getElementById('rep-imp-tokko')||{}).value||'0'),
+    visTokko:    parseInt((document.getElementById('rep-vis-tokko')||{}).value||'0'),
+    expZona:     parseInt((document.getElementById('rep-exp-zona')||{}).value||'0'),
+    visZona:     parseInt((document.getElementById('rep-vis-zona')||{}).value||'0'),
+    visWeb:      parseInt((document.getElementById('rep-vis-web')||{}).value||'0'),
+    consRedes:   parseInt((document.getElementById('rep-cons-redes')||{}).value||'0'),
+    consPortales:parseInt((document.getElementById('rep-cons-portales')||{}).value||'0'),
+    fichas:      parseInt((document.getElementById('rep-fichas')||{}).value||'0'),
+    comentario:  (document.getElementById('rep-comentario')||{}).value||'',
+  };
+}
+
+async function generarReportePDF(download){
   var d = getReporteData(); if(!d) return;
   var p = d.prop;
   var totalVis = d.visTokko + d.visZona + d.visWeb;
@@ -5233,11 +5292,25 @@ async function generarReportePDF(){
 
   '</body></html>';
 
-  var win = window.open('','_blank');
-  if(!win){ alert('Habilitá las ventanas emergentes en tu browser'); return; }
-  win.document.write(html);
-  win.document.close();
-  setTimeout(function(){ win.print(); }, 1200);
+  if(download){
+    // Download as PDF via blob
+    var blob = new Blob([html], {type:'text/html;charset=utf-8'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    var nombreArchivo = 'Reporte_'+p.addr.replace(/[^a-zA-Z0-9]/g,'_')+'_'+d.mesLabel.replace(/ /g,'_')+'.html';
+    a.href = url;
+    a.download = nombreArchivo;
+    a.click();
+    URL.revokeObjectURL(url);
+    // Show toast with instructions
+    showSaveToast('⬇️ Descargado — abrilo y presioná Ctrl+P → Guardar como PDF');
+  } else {
+    var win = window.open('','_blank');
+    if(!win){ alert('Habilitá las ventanas emergentes en tu browser'); return; }
+    win.document.write(html);
+    win.document.close();
+    setTimeout(function(){ win.print(); }, 1200);
+  }
 }
 
 
