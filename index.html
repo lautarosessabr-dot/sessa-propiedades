@@ -4905,6 +4905,10 @@ function renderTasador(){
         '<input id="rep-cons-portales" type="number" min="0" placeholder="ej: 0" style="width:100%;height:36px;padding:0 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface2);color:var(--text);outline:none;font-family:inherit;"/></div>'+
       '<div class="form-group"><label>Fichas enviadas (Tokko)</label>'+
         '<input id="rep-fichas" type="number" min="0" placeholder="ej: 0" style="width:100%;height:36px;padding:0 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface2);color:var(--text);outline:none;font-family:inherit;"/></div>'+
+      '<div class="form-group"><label>💡 Precio sugerido por la inmobiliaria</label>'+
+        '<input id="rep-precio-sugerido" type="text" placeholder="ej: U$D 155.000" style="width:100%;height:36px;padding:0 10px;font-size:13px;font-weight:600;border:2px solid #3D5FA0;border-radius:var(--radius-sm);background:#EBF0FA;color:#1E2D4A;outline:none;font-family:inherit;"/></div>'+
+      '<div class="form-group"><label style="opacity:0;"> </label>'+
+        '<div style="height:36px;display:flex;align-items:center;font-size:11px;color:var(--text3);padding:0 4px;">Se mostrará destacado en el reporte</div></div>'+
       '<div class="form-group" style="grid-column:1/-1;"><label>Novedades / Comentario del asesor</label>'+
         '<textarea id="rep-comentario" rows="3" placeholder="ej: Hubo un interesado que visitó la propiedad y está evaluando la propuesta..." style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface2);color:var(--text);outline:none;font-family:inherit;resize:vertical;box-sizing:border-box;"></textarea></div>'+
     '</div>';
@@ -4976,6 +4980,7 @@ function getReporteData(){
     consPortales:parseInt((document.getElementById('rep-cons-portales')||{}).value||'0'),
     fichas:      parseInt((document.getElementById('rep-fichas')||{}).value||'0'),
     comentario:  (document.getElementById('rep-comentario')||{}).value||'',
+    precioSugerido: (document.getElementById('rep-precio-sugerido')||{}).value||'',
   };
 }
 
@@ -5034,6 +5039,7 @@ function getReporteData(){
     consPortales:parseInt((document.getElementById('rep-cons-portales')||{}).value||'0'),
     fichas:      parseInt((document.getElementById('rep-fichas')||{}).value||'0'),
     comentario:  (document.getElementById('rep-comentario')||{}).value||'',
+    precioSugerido: (document.getElementById('rep-precio-sugerido')||{}).value||'',
   };
 }
 
@@ -5275,6 +5281,15 @@ async function generarReportePDF(download){
       '</tr>'+
     '</table>'+
 
+    (d.precioSugerido ?
+      '<div style="background:#1E2D4A;color:#fff;border-radius:10px;padding:20px 24px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;">'+
+        '<div>'+
+          '<div style="font-size:10px;text-transform:uppercase;letter-spacing:.12em;opacity:.7;margin-bottom:4px;">💡 Precio sugerido por la inmobiliaria</div>'+
+          '<div style="font-size:28px;font-weight:800;line-height:1;">'+d.precioSugerido+'</div>'+
+        '</div>'+
+        '<div style="text-align:right;font-size:11px;opacity:.6;">Recomendación<br>del equipo</div>'+
+      '</div>'
+    : '')+
     '<div class="rec">'+
       '<div class="rec-title">✨ Recomendación del equipo</div>'+
       recText+
