@@ -931,9 +931,9 @@ function guardadoManual(pid){
 async function sincronizarPreciosTokko(){
   var btn = event.target;
   btn.textContent = '⏳ Verificando...'; btn.disabled = true;
-  var TOKKO_KEY = ''; // key handled server-side
+  var TOKKO_KEY = 'a816281c7b5e042cf4b63ce93dae3b4ff5817c7e';
   try {
-    var resp = await fetch('/api/tokko?endpoint=properties&limit=200');
+    var resp = await fetch('https://www.tokkobroker.com/api/v1/property/?key=a816281c7b5e042cf4b63ce93dae3b4ff5817c7e&format=json&limit=200&lang=es_ar&current_status=2');
     var data = await resp.json();
     var tokkoItems = data.objects || [];
     var cambios = [];
@@ -1305,7 +1305,7 @@ async function sincronizarFotosTokko(){
   if(btn){ btn.textContent='⏳ Obteniendo fotos...'; btn.disabled=true; }
   var updated = 0;
   try {
-    var r = await fetch('/api/tokko?endpoint=properties&limit=200');
+    var r = await fetch('https://www.tokkobroker.com/api/v1/property/?key=a816281c7b5e042cf4b63ce93dae3b4ff5817c7e&format=json&limit=200&lang=es_ar&current_status=2');
     if(!r.ok) throw new Error('HTTP '+r.status);
     var data = await r.json();
     var tokkoItems = data.objects || [];
@@ -1334,7 +1334,7 @@ async function syncCoverPhoto(pid, tokkoId){
   var p = props.find(function(x){return x.id===pid;}); if(!p||!tokkoId) return;
   showSaveToast('⏳ Obteniendo foto...');
   try {
-    var r = await fetch('/api/tokko?endpoint=properties&id='+tokkoId);
+    var r = await fetch('https://www.tokkobroker.com/api/v1/property/'+tokkoId+'/?key=a816281c7b5e042cf4b63ce93dae3b4ff5817c7e&format=json&lang=es_ar');
     var d = await r.json();
     var photo = '';
     // Tokko uses photos[0].image as the main photo
@@ -1824,9 +1824,9 @@ async function generarDescripcion(pid){
     (inputText ? 'Detalles adicionales: ' + inputText + '\n' : '') +
     'Usá un tono profesional y persuasivo. No uses emojis. Destacá las características principales.';
   try {
-    const res = await fetch('/api/groq',{
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions',{
       method:'POST',
-      headers:{'Content-Type':'application/json'},
+      headers:{'Content-Type':'application/json','Authorization':'Bearer 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'},
       body:JSON.stringify({
         model:'llama-3.3-70b-versatile',
         max_tokens:400,
@@ -2188,9 +2188,30 @@ function renderGrid(){
   var actNormal = act.filter(function(p){ return !p.isConstructora; });
   var actConst  = act.filter(function(p){ return p.isConstructora; });
 
+  // Sort actNormal: inactivas primero (>=14d), luego por días desc, luego sin fecha al fondo
+  actNormal.sort(function(a, b){
+    var da = diasSinContacto(a);
+    var db = diasSinContacto(b);
+    var aInact = da !== null && da >= MAX;
+    var bInact = db !== null && db >= MAX;
+    if(aInact && !bInact) return -1;
+    if(!aInact && bInact) return 1;
+    // dentro del mismo grupo, más días primero
+    if(da === null && db === null) return 0;
+    if(da === null) return 1;
+    if(db === null) return -1;
+    return db - da;
+  });
+
+  var inactCount = actNormal.filter(function(p){ var d=diasSinContacto(p); return d!==null && d>=MAX; }).length;
+
   if(reserva.length) h += '<div class="sec-label" style="color:#A32D2D;">Reserva tomada — máxima prioridad ('+reserva.length+')</div><div class="grid">'+reserva.map(cardHTML).join('')+'</div>';
   if(ec.length)  h += '<div class="sec-label cierre-lbl">En cierre — seguimiento prioritario ('+ec.length+')</div><div class="grid">'+ec.map(cardHTML).join('')+'</div>';
-  if(actNormal.length){ if(reserva.length||ec.length) h += '<div class="sec-label">Propiedades activas ('+actNormal.length+')</div>'; h += '<div class="grid">'+actNormal.map(cardHTML).join('')+'</div>'; }
+  if(actNormal.length){
+    if(reserva.length||ec.length) h += '<div class="sec-label">Propiedades activas ('+actNormal.length+')'+
+      (inactCount ? ' <span style="color:#E24B4A;font-size:11px;font-weight:700;margin-left:6px;">⚠ '+inactCount+' sin contacto</span>' : '')+'</div>';
+    h += '<div class="grid">'+actNormal.map(cardHTML).join('')+'</div>';
+  }
   if(actConst.length) h += '<div class="sec-label" style="color:#888;">🏗 Constructoras / Desarrolladoras ('+actConst.length+')</div><div class="grid">'+actConst.map(cardHTML).join('')+'</div>';
   if(fin.length) h += '<div class="sec-label">Operaciones finalizadas ('+fin.length+')</div><div class="grid">'+fin.map(cardHTML).join('')+'</div>';
   if(!list.length) h = '<div class="no-sel">Sin resultados.</div>';
@@ -5245,9 +5266,9 @@ async function generarReportePDF(download){
       ' Días en cartera: '+d.dias+'.'+
       (d.comentario?' Novedades: '+d.comentario+'.':'')+
       ' Redactá 2 oraciones de recomendación concreta y profesional para el propietario. Sin saludos, directo al punto.';
-    var ir = await fetch('/api/groq',{
+    var ir = await fetch('https://api.groq.com/openai/v1/chat/completions',{
       method:'POST',
-      headers:{'Content-Type':'application/json'},
+      headers:{'Content-Type':'application/json','Authorization':'Bearer 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'},
       body:JSON.stringify({model:'llama-3.3-70b-versatile',max_tokens:120,messages:[{role:'user',content:pr}]})
     });
     var id = await ir.json();
@@ -5543,7 +5564,7 @@ async function ejecutarTasacion(){
 
   // Tokko
   try{
-    var tr=await fetch('/api/tokko?endpoint=properties&limit=100');
+    var tr=await fetch('https://www.tokkobroker.com/api/v1/property/?key=a816281c7b5e042cf4b63ce93dae3b4ff5817c7e&format=json&limit=100&lang=es_ar&current_status=2');
     var td=await tr.json();
     var ti=(td.objects||[]).filter(function(t){
       var tt=(t.type&&t.type.name||'').toLowerCase();
@@ -5560,7 +5581,7 @@ async function ejecutarTasacion(){
   // IA
   try{
     var nl='\n';var pr='Tasá en '+moneda+' para La Plata/City Bell 2025/2026.'+nl+'Tipo: '+tipo+nl+'Zona: '+zona+(sup?nl+'Sup: '+sup+'m²':'')+(dorms?nl+'Dorm: '+dorms:'')+(banos?nl+'Baños: '+banos:'')+(antig?nl+'Antig: '+antig:'')+(estado?nl+'Estado: '+estado:'')+(extras?nl+'Extras: '+extras:'')+nl+nl+'Responde SOLO:'+nl+'PRECIO_MIN: [numero]'+nl+'PRECIO_MAX: [numero]'+nl+'PRECIO_SUGERIDO: [numero]'+nl+'FUNDAMENTO: [oracion]';
-    var ir=await fetch('/api/groq',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'llama-3.3-70b-versatile',max_tokens:150,messages:[{role:'user',content:pr}]})});
+    var ir=await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer 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'},body:JSON.stringify({model:'llama-3.3-70b-versatile',max_tokens:150,messages:[{role:'user',content:pr}]})});
     var id=await ir.json();
     var it=id.choices&&id.choices[0]?id.choices[0].message.content:'';
     var sm=it.match(/PRECIO_SUGERIDO:\s*([0-9]+)/);
@@ -5620,11 +5641,11 @@ async function ejecutarMatchBusquedas(){
     'Formato: para cada búsqueda usá "**[Nombre cliente]:** [propiedad] — [razón breve]"';
 
   try {
-    var resp = await fetch('/api/groq',{
+    var resp = await fetch('https://api.groq.com/openai/v1/chat/completions',{
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        // Authorization handled server-side
+        'Authorization': 'Bearer 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',
       },
       body: JSON.stringify({
         model: 'llama-3.3-70b-versatile',
@@ -5788,11 +5809,11 @@ async function llamarIA(tool){
   var p = prompts[tool];
 
   try {
-    var resp = await fetch('/api/groq',{
+    var resp = await fetch('https://api.groq.com/openai/v1/chat/completions',{
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        // Authorization handled server-side
+        'Authorization': 'Bearer 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',
       },
       body: JSON.stringify({
         model: 'llama-3.3-70b-versatile',
@@ -6552,7 +6573,7 @@ document.addEventListener('DOMContentLoaded', function(){
 });
 
 // ── TOKKO IMPORT ─────────────────────────────────────────────────────────────
-var TOKKO_KEY = ''; // key handled server-side
+var TOKKO_KEY = 'a816281c7b5e042cf4b63ce93dae3b4ff5817c7e';
 
 var TOKKO_TIPO_MAP = {
   'Departamento': 'Dpto', 'Casa': 'Casa', 'PH': 'PH', 'Local': 'Local',
@@ -6565,7 +6586,7 @@ async function importarDesdeTokko(){
   btn.textContent = '⏳ Cargando...'; btn.disabled = true;
 
   try {
-    var url = '/api/tokko?endpoint=properties&limit=200';
+    var url = 'https://www.tokkobroker.com/api/v1/property/?key=a816281c7b5e042cf4b63ce93dae3b4ff5817c7e&format=json&limit=200&lang=es_ar&current_status=2';
     var res = await fetch(url);
     if(!res.ok) throw new Error('HTTP '+res.status);
     var data = await res.json();
