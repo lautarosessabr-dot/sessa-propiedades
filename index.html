@@ -962,6 +962,10 @@ async function sincronizarPreciosTokko(){
       showSaveToast('✅ Todo actualizado — sin cambios');
       return;
     }
+    // Si solo hay bajas sin cambios de precio, igual abrimos el modal
+    if(!cambios.length && bajas.length){
+      showSaveToast('\u26A0\uFE0F '+bajas.length+' propiedad(es) ya no disponibles en Tokko');
+    }
     // Show changes modal
     var overlay = document.createElement('div');
     overlay.className = 'resumen-overlay';
@@ -1011,7 +1015,8 @@ async function sincronizarPreciosTokko(){
         '<div id="precio-cambios-list">'+rows+'</div>'+
         '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid #eee;">'+
           '<button onclick="closeExportModal(this)" style="height:34px;padding:0 16px;font-size:12px;border:1px solid #ddd;border-radius:8px;background:#fff;cursor:pointer;font-family:inherit;">Cerrar</button>'+
-          '<button onclick="aplicarTodosCambios()" style="height:34px;padding:0 16px;font-size:12px;font-weight:700;border:none;border-radius:8px;background:#185FA5;color:#fff;cursor:pointer;font-family:inherit;">Actualizar todos</button>'+
+          '<button onclick="archivarTodasBajas()" style="height:34px;padding:0 16px;font-size:12px;font-weight:700;border:none;border-radius:8px;background:#A32D2D;color:#fff;cursor:pointer;font-family:inherit;">📦 Archivar todas las bajas</button>'+
+          '<button onclick="aplicarTodosCambios()" style="height:34px;padding:0 16px;font-size:12px;font-weight:700;border:none;border-radius:8px;background:#185FA5;color:#fff;cursor:pointer;font-family:inherit;">Actualizar precios</button>'+
         '</div>'+
       '</div>';
     window._precioCambios = cambios;
@@ -1052,6 +1057,28 @@ function marcarNoDisponible(pid, btn){
 function ignorarBaja(pid, btn){
   var row = btn.closest('div[style*="FCEBEB"]');
   if(row) row.remove();
+}
+
+function archivarTodasBajas(){
+  var bajas = window._bajasDetectadas || [];
+  if(!bajas.length) return;
+  var pendientes = bajas.filter(function(p){ return !p.finalizada; });
+  if(!pendientes.length){ showSaveToast('Sin propiedades pendientes'); return; }
+  if(!confirm('¿Archivar ' + pendientes.length + ' propiedad(es) como No disponible? Quedarán en Finalizadas sin contar como venta.')) return;
+  pendientes.forEach(function(p){
+    p.finalizada = true;
+    p.fechaFin = new Date().toLocaleDateString('es-AR');
+    p.noDisponible = true;
+    addActivityLog(p, 'Archivada — ya no disponible en Tokko');
+    saveProp(p);
+  });
+  // Grey out all baja rows in modal
+  document.querySelectorAll('div[style*="FCEBEB"]').forEach(function(row){
+    row.style.opacity = '.4';
+    row.style.pointerEvents = 'none';
+  });
+  showSaveToast('\u2705 ' + pendientes.length + ' propiedades archivadas');
+  renderGrid();
 }
 
 function aplicarCambioPrecio(idx, btn){
@@ -3568,6 +3595,245 @@ function renderDashboard(period){
   return h;
 }
 
+
+// ── LEADS POR ASESOR ─────────────────────────────────────────────────────────
+var leadsData = []; // loaded from Firebase meta
+
+function setStatsSubTab(tab){
+  window._statsSubTab = tab;
+  renderStats();
+}
+
+function renderLeadsTab(){
+  var semanas = (leadsData||[]).slice().sort(function(a,b){ return b.semana.localeCompare(a.semana); });
+  var h = '';
+
+  // ── Botón agregar semana ──────────────────────────────────────────────────
+  h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">';
+  h += '<div style="font-size:13px;color:#666;">Registrá los leads asignados a cada asesor semanalmente desde Tokko.</div>';
+  h += '<button onclick="abrirModalLeads()" style="height:36px;padding:0 16px;font-size:12px;font-weight:700;border:none;border-radius:8px;background:#185FA5;color:#fff;cursor:pointer;font-family:inherit;">+ Cargar semana</button>';
+  h += '</div>';
+
+  if(!semanas.length){
+    h += '<div style="text-align:center;padding:60px 20px;color:#aaa;font-size:13px;">No hay datos cargados aún.<br>Hacé clic en <strong>+ Cargar semana</strong> para empezar.</div>';
+    return h;
+  }
+
+  // ── KPIs totales últimas 4 semanas ────────────────────────────────────────
+  var ult4 = semanas.slice(0,4);
+  var totalLeads = 0;
+  var byAsesor = {};
+  asesores.forEach(function(a){ byAsesor[a.id] = 0; });
+  ult4.forEach(function(s){
+    (s.asignaciones||[]).forEach(function(a){
+      totalLeads += (a.cantidad||0);
+      byAsesor[a.asesorId] = (byAsesor[a.asesorId]||0) + (a.cantidad||0);
+    });
+  });
+
+  h += '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:24px;">';
+  // Total
+  h += '<div style="flex:1;min-width:120px;background:#fff;border:1px solid #eee;border-radius:12px;padding:16px;text-align:center;border-top:3px solid #185FA5;">'+
+    '<div style="font-size:28px;font-weight:800;color:#185FA5;">'+totalLeads+'</div>'+
+    '<div style="font-size:11px;color:#888;margin-top:3px;">Leads últimas 4 semanas</div>'+
+  '</div>';
+  // Por asesor
+  asesores.forEach(function(a){
+    var tot = byAsesor[a.id]||0;
+    h += '<div style="flex:1;min-width:120px;background:#fff;border:1px solid #eee;border-radius:12px;padding:16px;text-align:center;border-top:3px solid #3D5FA0;">'+
+      '<div style="font-size:28px;font-weight:800;color:#3D5FA0;">'+tot+'</div>'+
+      '<div style="font-size:11px;color:#888;margin-top:3px;">'+a.name.split(' ')[0]+'</div>'+
+    '</div>';
+  });
+  h += '</div>';
+
+  // ── Tabla semanal ─────────────────────────────────────────────────────────
+  h += '<div style="background:#fff;border:1px solid #eee;border-radius:14px;overflow:hidden;margin-bottom:24px;">';
+  h += '<div style="padding:16px 20px;border-bottom:1px solid #f0f0f0;display:flex;justify-content:space-between;align-items:center;">';
+  h += '<div style="font-size:13px;font-weight:700;">Historial semanal</div>';
+  h += '</div>';
+  h += '<div style="overflow-x:auto;">';
+  h += '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
+  // Header
+  h += '<thead><tr style="background:#F0F4FF;">';
+  h += '<th style="padding:10px 16px;text-align:left;font-weight:700;color:#1E2D4A;font-size:11px;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;">Semana</th>';
+  asesores.forEach(function(a){
+    h += '<th style="padding:10px 16px;text-align:center;font-weight:700;color:#1E2D4A;font-size:11px;text-transform:uppercase;letter-spacing:.05em;">'+a.name.split(' ')[0]+'</th>';
+  });
+  h += '<th style="padding:10px 16px;text-align:center;font-weight:700;color:#1E2D4A;font-size:11px;text-transform:uppercase;letter-spacing:.05em;">Total</th>';
+  h += '<th style="padding:10px 16px;text-align:center;font-size:11px;"></th>';
+  h += '</tr></thead><tbody>';
+
+  semanas.forEach(function(s, idx){
+    var rowTotal = 0;
+    var bg = idx%2===0?'#fff':'#FAFAFA';
+    h += '<tr style="background:'+bg+';border-bottom:1px solid #f5f5f5;">';
+    // Semana label
+    var sLabel = formatSemanaLabel(s.semana);
+    h += '<td style="padding:10px 16px;font-weight:600;white-space:nowrap;">'+sLabel+'</td>';
+    // Por asesor
+    asesores.forEach(function(a){
+      var asig = (s.asignaciones||[]).find(function(x){ return x.asesorId===a.id; });
+      var cant = asig ? (asig.cantidad||0) : 0;
+      rowTotal += cant;
+      var color = cant>5?'#0F6E56':cant>2?'#185FA5':cant>0?'#555':'#ccc';
+      h += '<td style="padding:10px 16px;text-align:center;font-weight:'+(cant>0?'700':'400')+';color:'+color+';">'+
+        (cant>0?cant:'—')+
+        (asig&&asig.detalle?'<div style="font-size:10px;color:#888;font-weight:400;max-width:120px;margin:0 auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="'+asig.detalle+'">'+asig.detalle+'</div>':'')+
+      '</td>';
+    });
+    h += '<td style="padding:10px 16px;text-align:center;font-weight:800;color:#185FA5;">'+rowTotal+'</td>';
+    h += '<td style="padding:10px 16px;text-align:center;">'+
+      '<button onclick="editarSemanaLeads(\''+s.semana+'\')" style="height:24px;padding:0 8px;font-size:10px;border:1px solid #ddd;border-radius:6px;background:#fff;color:#888;cursor:pointer;font-family:inherit;">✏️</button>'+
+      '<button onclick="borrarSemanaLeads(\''+s.semana+'\')" style="height:24px;padding:0 8px;font-size:10px;border:1px solid #fcc;border-radius:6px;background:#fff;color:#E24B4A;cursor:pointer;font-family:inherit;margin-left:4px;">🗑</button>'+
+    '</td>';
+    h += '</tr>';
+  });
+  h += '</tbody></table></div></div>';
+
+  // ── Barras de evolución ───────────────────────────────────────────────────
+  if(semanas.length > 1){
+    h += '<div style="background:#fff;border:1px solid #eee;border-radius:14px;padding:20px;margin-bottom:20px;">';
+    h += '<div style="font-size:13px;font-weight:700;margin-bottom:16px;">Evolución últimas 8 semanas</div>';
+    var ult8 = semanas.slice(0,8).reverse();
+    var maxWeek = Math.max.apply(null, ult8.map(function(s){
+      return (s.asignaciones||[]).reduce(function(acc,a){ return acc+(a.cantidad||0); },0);
+    }))||1;
+    ult8.forEach(function(s){
+      var tot = (s.asignaciones||[]).reduce(function(acc,a){ return acc+(a.cantidad||0); },0);
+      var pct = Math.round(tot/maxWeek*100);
+      var sLabel = formatSemanaLabel(s.semana);
+      h += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">';
+      h += '<div style="font-size:11px;color:#666;width:130px;flex-shrink:0;white-space:nowrap;">'+sLabel+'</div>';
+      h += '<div style="flex:1;background:#f0f0f0;border-radius:6px;height:20px;position:relative;">';
+      h += '<div style="height:20px;border-radius:6px;background:#185FA5;width:'+pct+'%;transition:width .3s;"></div>';
+      // Per-asesor segments
+      h += '</div>';
+      h += '<div style="font-size:12px;font-weight:700;color:#185FA5;width:28px;text-align:right;">'+tot+'</div>';
+      h += '</div>';
+    });
+    h += '</div>';
+  }
+
+  return h;
+}
+
+function formatSemanaLabel(semana){
+  // semana format: "2026-W23" → "Sem 23 · 2026" or with date range
+  if(!semana) return semana;
+  var parts = semana.split('-W');
+  if(parts.length===2){
+    var year = parseInt(parts[0]);
+    var week = parseInt(parts[1]);
+    // Calculate Monday of that week
+    var jan4 = new Date(year, 0, 4);
+    var mon = new Date(jan4.getTime() + (week-1)*7*86400000 - (jan4.getDay()||7-1)*86400000);
+    var sun = new Date(mon.getTime() + 6*86400000);
+    var fmt = function(d){ return d.getDate()+'/'+(d.getMonth()+1); };
+    return fmt(mon)+' al '+fmt(sun)+' (Sem '+week+')';
+  }
+  return semana;
+}
+
+function getISOWeek(d){
+  var date = new Date(d.getTime());
+  date.setHours(0,0,0,0);
+  date.setDate(date.getDate()+3-(date.getDay()+6)%7);
+  var week1 = new Date(date.getFullYear(),0,4);
+  return date.getFullYear()+'-W'+String(1+Math.round(((date.getTime()-week1.getTime())/86400000-3+(week1.getDay()+6)%7)/7)).padStart(2,'0');
+}
+
+function abrirModalLeads(semanaEditar){
+  var semanaActual = semanaEditar || getISOWeek(new Date());
+  var existing = semanaEditar ? (leadsData||[]).find(function(s){ return s.semana===semanaEditar; }) : null;
+
+  var overlay = document.createElement('div');
+  overlay.className = 'resumen-overlay';
+  overlay.onclick = function(e){ if(e.target===overlay) overlay.remove(); };
+
+  var fields = asesores.map(function(a){
+    var asig = existing ? (existing.asignaciones||[]).find(function(x){ return x.asesorId===a.id; }) : null;
+    return '<div style="margin-bottom:14px;">'+
+      '<div style="font-size:12px;font-weight:700;color:#1E2D4A;margin-bottom:6px;">'+a.name+'</div>'+
+      '<div style="display:flex;gap:8px;align-items:center;">'+
+        '<div style="display:flex;flex-direction:column;gap:2px;">'+
+          '<label style="font-size:10px;color:#888;">Cantidad</label>'+
+          '<input id="lead-cant-'+a.id+'" type="number" min="0" value="'+(asig?asig.cantidad||0:0)+'" '+
+          'style="width:70px;height:34px;padding:0 8px;font-size:14px;font-weight:700;border:1px solid #ddd;border-radius:8px;outline:none;font-family:inherit;text-align:center;"/>'+
+        '</div>'+
+        '<div style="flex:1;display:flex;flex-direction:column;gap:2px;">'+
+          '<label style="font-size:10px;color:#888;">Nombres / detalle (opcional)</label>'+
+          '<input id="lead-det-'+a.id+'" type="text" placeholder="ej: García, López, Rodríguez..." value="'+(asig?asig.detalle||'':'')+'" '+
+          'style="width:100%;height:34px;padding:0 10px;font-size:12px;border:1px solid #ddd;border-radius:8px;outline:none;font-family:inherit;"/>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+
+  overlay.innerHTML =
+    '<div class="resumen-modal" style="max-width:480px;">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">'+
+        '<h3 style="font-size:15px;font-weight:700;">👥 '+(semanaEditar?'Editar':'Cargar')+' leads de la semana</h3>'+
+        '<button onclick="this.closest(\'.resumen-overlay\').remove()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#888;">×</button>'+
+      '</div>'+
+      '<div style="margin-bottom:16px;">'+
+        '<label style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:6px;">Semana</label>'+
+        '<input id="lead-semana" type="week" value="'+semanaActual+'" '+
+        'style="height:36px;padding:0 10px;font-size:13px;border:1px solid #ddd;border-radius:8px;outline:none;font-family:inherit;"/>'+
+      '</div>'+
+      '<div style="border-top:1px solid #eee;padding-top:16px;margin-bottom:4px;">'+fields+'</div>'+
+      '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;padding-top:12px;border-top:1px solid #eee;">'+
+        '<button onclick="this.closest(\'.resumen-overlay\').remove()" style="height:34px;padding:0 16px;font-size:12px;border:1px solid #ddd;border-radius:8px;background:#fff;cursor:pointer;font-family:inherit;">Cancelar</button>'+
+        '<button onclick="guardarSemanaLeads()" style="height:34px;padding:0 20px;font-size:12px;font-weight:700;border:none;border-radius:8px;background:#185FA5;color:#fff;cursor:pointer;font-family:inherit;">💾 Guardar</button>'+
+      '</div>'+
+    '</div>';
+
+  document.body.appendChild(overlay);
+}
+
+function editarSemanaLeads(semana){
+  abrirModalLeads(semana);
+}
+
+function guardarSemanaLeads(){
+  var semana = (document.getElementById('lead-semana')||{}).value;
+  if(!semana){ alert('Seleccioná una semana'); return; }
+
+  var asignaciones = asesores.map(function(a){
+    var cant = parseInt((document.getElementById('lead-cant-'+a.id)||{}).value||'0')||0;
+    var det  = ((document.getElementById('lead-det-'+a.id)||{}).value||'').trim();
+    return { asesorId: a.id, nombre: a.name, cantidad: cant, detalle: det };
+  });
+
+  // Remove existing entry for this week and add new
+  leadsData = (leadsData||[]).filter(function(s){ return s.semana !== semana; });
+  leadsData.push({ semana: semana, asignaciones: asignaciones, cargadoEl: new Date().toLocaleDateString('es-AR') });
+
+  // Save to Firebase meta
+  saveLeadsData();
+
+  // Close modal
+  var overlay = document.querySelector('.resumen-overlay');
+  if(overlay) overlay.remove();
+
+  showSaveToast('✅ Leads de la semana guardados');
+  renderStats();
+}
+
+function borrarSemanaLeads(semana){
+  if(!confirm('¿Eliminar los datos de la semana '+formatSemanaLabel(semana)+'?')) return;
+  leadsData = (leadsData||[]).filter(function(s){ return s.semana !== semana; });
+  saveLeadsData();
+  showSaveToast('🗑 Semana eliminada');
+  renderStats();
+}
+
+function saveLeadsData(){
+  if(!window._metaLoaded) return;
+  var metaRef = window.db ? window.db.collection('sessa_meta').doc('shared') : null;
+  if(metaRef) metaRef.update({ leadsData: leadsData }).catch(function(e){ console.error('saveLeadsData:', e); });
+}
+
 function renderStats(){
   var el = document.getElementById('stats-content'); if(!el) return;
 
@@ -3675,7 +3941,24 @@ function renderStats(){
   var meses = Object.keys(mesesMap).slice(-6);
 
   // ── HTML ──────────────────────────────────────────────────────────────────
+  var activeStatsTab = window._statsSubTab || 'dashboard';
   var h = '<div style="padding-bottom:40px;">';
+
+  // ── Sub-tab bar ───────────────────────────────────────────────────────────
+  function stab(id, label, icon){
+    var act = activeStatsTab === id;
+    return '<button onclick="setStatsSubTab(\''+id+'\')" style="height:34px;padding:0 16px;font-size:12px;font-weight:'+(act?'700':'500')+';border-radius:8px;cursor:pointer;font-family:inherit;border:none;background:'+(act?'#185FA5':'transparent')+';color:'+(act?'#fff':'#888')+';white-space:nowrap;transition:all .15s;">'+icon+' '+label+'</button>';
+  }
+  h += '<div style="display:flex;gap:4px;margin-bottom:20px;background:#f5f5f5;padding:4px;border-radius:10px;width:fit-content;">';
+  h += stab('dashboard','Dashboard','📊');
+  h += stab('leads','Leads por asesor','👥');
+  h += '</div>';
+
+  // ── Render selected sub-tab ───────────────────────────────────────────────
+  if(activeStatsTab === 'leads'){
+    el.innerHTML = h + renderLeadsTab() + '</div>';
+    return;
+  }
 
   // ── Filter bar ────────────────────────────────────────────────────────────
   h += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:20px;padding:12px 16px;background:#fff;border:1px solid #eee;border-radius:12px;">';
@@ -6977,6 +7260,7 @@ function saveMeta(){
   }
   var payload = {
     metaMensual: metaMensual,
+      leadsData: leadsData,
   };
   // Only save IDs if they're greater than 0
   if(nextId > 1)    payload.nextId    = nextId;
