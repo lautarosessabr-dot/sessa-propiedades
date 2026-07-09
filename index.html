@@ -2975,6 +2975,48 @@ function renderCompradorDetail(){
     });
     h += '</div>';
   });
+  if(apt !== 'checklist') h += '</div>'; // close hidden
+  if(apt === 'checklist') h += '</div>'; // close checklist
+
+  // ── TAB: VISITAS ──────────────────────────────────────────────────────────
+  if(apt !== 'visitas') h += '<div style="display:none">';
+  h += '<div onclick="event.stopPropagation()">';
+  h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">';
+  h += '<div style="font-size:13px;font-weight:700;color:#1a1a1a;">Registro de visitas</div>';
+  h += '<button data-pid="'+p.id+'" onclick="event.stopPropagation();abrirNuevaVisita(parseInt(this.dataset.pid))" '+
+    'style="height:32px;padding:0 14px;font-size:12px;font-weight:700;border:1px solid #185FA5;border-radius:8px;background:#E6F1FB;color:#0C447C;cursor:pointer;font-family:inherit;">+ Registrar visita</button>';
+  h += '</div>';
+  if(!p.visitas||!p.visitas.length){
+    h += '<div style="text-align:center;padding:40px 20px;color:#bbb;font-size:13px;">Sin visitas registradas.<br><br>'+
+      '<button onclick="event.stopPropagation();abrirNuevaVisita('+p.id+')" style="height:32px;padding:0 14px;font-size:12px;font-weight:700;border:1px solid #185FA5;border-radius:8px;background:#E6F1FB;color:#0C447C;cursor:pointer;font-family:inherit;">+ Registrar primera visita</button>'+
+    '</div>';
+  } else {
+    var resColors = {
+      interesado:{bg:'#E1F5EE',color:'#085041',border:'#0F6E56',label:'⭐ Muy interesado'},
+      dudoso:{bg:'#FAEEDA',color:'#633806',border:'#854F0B',label:'🤔 Dudoso'},
+      descartado:{bg:'#F5F5F5',color:'#888',border:'#ddd',label:'❌ Descartado'}
+    };
+    var visOrd = p.visitas.slice().sort(function(a,b){ return (b.fecha||'').localeCompare(a.fecha||''); });
+    h += '<div style="display:flex;flex-direction:column;gap:8px;">';
+    visOrd.forEach(function(v){
+      var rc = resColors[v.resultado]||resColors.dudoso;
+      h += '<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:'+rc.bg+';border:1px solid '+rc.border+'44;border-radius:10px;">';
+      h += '<div style="flex:1;">';
+      h += '<div style="font-size:13px;font-weight:700;color:#1a1a1a;">'+(v.nombre||'Visitante')+'</div>';
+      h += '<div style="font-size:11px;color:#666;margin-top:2px;">';
+      if(v.fecha) h += v.fecha;
+      if(v.origen) h += ' · '+v.origen;
+      if(v.telefono) h += ' · <a href="tel:'+v.telefono+'" style="color:#185FA5;">'+v.telefono+'</a>';
+      h += '</div>';
+      if(v.nota) h += '<div style="font-size:11px;color:#555;margin-top:4px;font-style:italic;">'+v.nota+'</div>';
+      h += '</div>';
+      h += '<span style="font-size:10px;font-weight:700;padding:3px 10px;border-radius:10px;background:#fff;color:'+rc.color+';border:1px solid '+rc.border+';white-space:nowrap;">'+rc.label+'</span>';
+      h += '</div>';
+    });
+    h += '</div>';
+  }
+  h += '</div>';
+  if(apt !== 'visitas') h += '</div>'; // close hidden
 
   h += '</div>';
   el.innerHTML = h;
@@ -3405,6 +3447,11 @@ function renderTareas(){
 // ── ESTADÍSTICAS ──────────────────────────────────────────────────────────────
 
 var statsFilter = 'all'; // 'all' | 'year' | 'month-YYYY-MM'
+
+function setPropTab(tab, pid){
+  window._propTab = tab;
+  renderDetail();
+}
 
 function setStatsFilter(f){
   statsFilter = f;
@@ -6350,35 +6397,8 @@ function renderDetail(){
           '</div>'+
         '</div>'+
       '</div>'+
-      // Visitas log
-      '<div style="margin-top:12px;" onclick="event.stopPropagation()">'+
-        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">'+
-          '<span style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em;">'+
-            'Registro de visitas ('+(p.visitas?p.visitas.length:0)+')'+
-          '</span>'+
-          '<button data-pid="'+p.id+'" onclick="event.stopPropagation();abrirNuevaVisita(parseInt(this.dataset.pid))" '+
-          'style="height:26px;padding:0 10px;font-size:11px;font-weight:600;border:1px solid #185FA5;border-radius:8px;background:#E6F1FB;color:#0C447C;cursor:pointer;font-family:inherit;">+ Registrar visita</button>'+
-        '</div>'+
-        (p.visitas&&p.visitas.length ?
-          '<div style="display:flex;flex-direction:column;gap:5px;">'+
-          p.visitas.slice().reverse().map(function(v){
-            var resColors = {interesado:{bg:'#E1F5EE',color:'#085041',border:'#0F6E56',label:'⭐ Muy interesado'},
-                             dudoso:{bg:'#FAEEDA',color:'#633806',border:'#854F0B',label:'🤔 Dudoso'},
-                             descartado:{bg:'#F5F5F5',color:'#888',border:'#ddd',label:'❌ Descartado'}};
-            var rc = resColors[v.resultado]||resColors.dudoso;
-            return '<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:'+rc.bg+';border:1px solid '+rc.border+'33;border-radius:8px;">'+
-              '<div style="flex:1;">'+
-                '<span style="font-size:12px;font-weight:600;color:#1a1a1a;">'+v.nombre+'</span>'+
-                (v.telefono?'<span style="font-size:11px;color:#185FA5;"> · '+v.telefono+'</span>':'')+
-                (v.nota?'<span style="font-size:11px;color:#666;"> — '+v.nota+'</span>':'')+
-              '</div>'+
-              '<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:'+rc.bg+';color:'+rc.color+';border:1px solid '+rc.border+';white-space:nowrap;">'+rc.label+'</span>'+
-              '<span style="font-size:10px;color:#aaa;white-space:nowrap;">'+v.fecha+'</span>'+
-            '</div>';
-          }).join('')+
-          '</div>'
-        : '<div style="font-size:12px;color:#bbb;text-align:center;padding:12px;">Sin visitas registradas</div>')+
-      '</div>'+
+      // Visitas moved to tab
+      
 
       // Activity log
       ((p.activityLog&&p.activityLog.length)?
@@ -6530,8 +6550,28 @@ function renderDetail(){
   // Barra de progreso
   h += '<div class="prog-bar"><div class="prog-fill" style="width:'+pc+'%;background:'+(p.finalizada?'#1D9E75':s.fill)+';"></div></div>';
 
+  // ── Tab bar ───────────────────────────────────────────────────────────────
+  var apt = window._propTab || 'info';
+  function dtab(id, label, icon, badge){
+    var act = apt===id;
+    return '<button onclick="setPropTab(\''+id+'\','+p.id+')" style="'+
+      'display:flex;align-items:center;gap:5px;height:34px;padding:0 14px;font-size:12px;font-weight:'+(act?'700':'500')+';'+
+      'border-radius:8px;cursor:pointer;font-family:inherit;border:none;'+
+      'background:'+(act?'#1E2D4A':'transparent')+';color:'+(act?'#fff':'#888')+';'+
+      'white-space:nowrap;transition:all .15s;">'+icon+' '+label+(badge?'<span style="background:'+(act?'#fff':'#1E2D4A')+';color:'+(act?'#1E2D4A':'#fff')+';border-radius:10px;font-size:10px;font-weight:700;padding:0 5px;margin-left:2px;">'+badge+'</span>':'')+
+    '</button>';
+  }
+  var checkDone = ETAPAS.reduce(function(acc,e){ return acc + p.tasks[e.id].filter(function(t){return t.done;}).length; }, 0);
+  var checkTotal = ETAPAS.reduce(function(acc,e){ return acc + p.tasks[e.id].length; }, 0);
+  var visitasCount = (p.visitas||[]).length;
+  h += '<div style="display:flex;gap:2px;margin-bottom:16px;background:#f5f5f5;padding:3px;border-radius:10px;width:fit-content;">';
+  h += dtab('info','Info','📋','');
+  h += dtab('checklist','Checklist','✅',checkDone+'/'+checkTotal);
+  h += dtab('visitas','Visitas','🏠',visitasCount||'');
+  h += '</div>';
 
-
+  // ── TAB: INFO ─────────────────────────────────────────────────────────────
+  if(apt !== 'info') h += '<div style="display:none">';
   // Pastillas de info
   // Highlight missing telefono for Tokko imports
   var missingTel = false;
@@ -6578,6 +6618,11 @@ function renderDetail(){
 
     (p.observaciones?'<div style="font-size:12px;color:#555;background:#fafaf8;padding:10px 14px;border-radius:10px;margin-bottom:14px;border-left:3px solid '+s.fill+';">'+p.observaciones+'</div>':'');
 
+  if(apt !== 'info') h += '</div>'; // close hidden
+  if(apt === 'info') h += '</div>'; // close info tab content
+
+  // ── TAB: CHECKLIST ────────────────────────────────────────────────────────
+  if(apt !== 'checklist') h += '<div style="display:none">';
   ETAPAS.forEach(function(e){
     const list = p.tasks[e.id];
     const dc = list.filter(function(t){return t.done;}).length;
